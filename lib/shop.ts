@@ -13,14 +13,14 @@ export const SHOP = {
   // Replace with your exact pin. Get from Google Maps:
   //   right-click the pin → the first row is "lat, lng" — paste it here.
   // Default below is central Karachi (DHA Phase 6 commercial). REPLACE THIS.
-  lat: 24.8050,
-  lng: 67.0500,
+  lat: 24.921676545656283, 
+  lng: 67.0560994423303,
 
   // Public-facing address (one line on the find-us card).
   address: 'Karachi, Pakistan',
 
   // Original Google Maps share link the owner provided.
-  googleMapsLink: 'https://share.google/Q7wDCor5jqiIbbjS3',
+  googleMapsLink: 'https://maps.app.goo.gl/3Q47bySzQsZ4QUVPA',
 
   // Built from {lat,lng} — used by the "Open in Google Maps" CTA when you
   // want directions from wherever the visitor is.

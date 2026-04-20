@@ -1,5 +1,7 @@
 'use client';
 
+export const dynamic = 'force-dynamic';
+
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Pencil, Plus, Save, X } from 'lucide-react';

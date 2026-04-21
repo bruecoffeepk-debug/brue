@@ -1,10 +1,11 @@
-import Image from 'next/image';
 import { notFound } from 'next/navigation';
 import { Printer, MessageCircle, MapPin } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { pkr } from '@/lib/utils';
 import { SHOP } from '@/lib/shop';
 import PrintButton from './PrintButton';
+import Wordmark from '@/components/brand/Wordmark';
+import Flower from '@/components/brand/Flower';
 
 export const dynamic = 'force-dynamic';
 
@@ -69,7 +70,7 @@ export default async function Receipt({ params }: { params: { id: string } }) {
               className="inline-flex items-center gap-2"
               style={{ fontSize: 13, color: 'var(--ink-soft)' }}
             >
-              <Image src="/Brue.png" alt="BRUE" width={90} height={28} className="h-6 w-auto" />
+              <Wordmark tone="terra" size={22} />
             </a>
             <div className="flex items-center gap-2">
               <PrintButton />
@@ -233,13 +234,7 @@ export default async function Receipt({ params }: { params: { id: string } }) {
               style={{ borderTop: '1.5px dashed var(--line-strong)', paddingTop: 22 }}
             >
               <div>
-                <Image
-                  src="/Brue.png"
-                  alt="BRUE"
-                  width={110}
-                  height={32}
-                  className="h-6 w-auto"
-                />
+                <Wordmark tone="terra" size={24} />
                 <p
                   className="mt-1.5"
                   style={{ fontSize: 11, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--ink-muted)' }}
@@ -249,10 +244,11 @@ export default async function Receipt({ params }: { params: { id: string } }) {
                 </p>
               </div>
               <p
-                className="script"
+                className="script inline-flex items-center gap-2"
                 style={{ color: 'var(--terra)', fontSize: 24, transform: 'rotate(-2deg)' }}
               >
-                thanks, {order.customer_name?.split(' ')[0] || 'friend'} ✿
+                thanks, {order.customer_name?.split(' ')[0] || 'friend'}
+                <Flower size={18} color="var(--terra)" centerColor="var(--mustard, #d4972e)" />
               </p>
             </div>
           </div>

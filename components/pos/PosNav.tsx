@@ -1,10 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { LayoutDashboard, ListOrdered, LogOut, Receipt, ShoppingCart, Users, Wallet } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import Wordmark from '@/components/brand/Wordmark';
 
 const LINKS = [
   { href: '/pos', label: 'POS', icon: ShoppingCart },
@@ -29,7 +29,7 @@ export default function PosNav() {
     <aside className="w-full md:w-64 md:fixed md:inset-y-0 md:left-0 bg-charcoal text-cream flex md:flex-col z-30 border-r border-cream/10">
       <div className="flex md:block items-center justify-between px-5 md:px-6 py-5 md:py-6 md:border-b border-cream/10 w-full">
         <Link href="/pos" className="flex items-center gap-2">
-          <Image src="/Brue_W.png" alt="BRUE" width={120} height={36} className="h-8 w-auto" />
+          <Wordmark tone="bone" size={30} />
           <span className="sticker !text-[10px] !py-1 text-amber border-amber">Staff</span>
         </Link>
       </div>

@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
 import { pkr } from '@/lib/utils';
 import type { DrinkWithCategory } from '@/lib/utils';
+import FlowerField from '@/components/brand/FlowerField';
+import Flower from '@/components/brand/Flower';
 
 // Debug: force-dynamic so every request hits Supabase fresh. Swap back to
 // `export const revalidate = 60` for ISR once stable.
@@ -53,6 +55,8 @@ export default async function HomePage() {
               'radial-gradient(900px 600px at 95% 20%, rgba(196,69,38,0.07), transparent 60%)',
           }}
         />
+        {/* ambient flowers drifting behind hero content */}
+        <FlowerField density={14} seed={3} tone="terra" />
         <div className="relative z-[2] max-w-[1400px] mx-auto px-7 lg:px-10 pt-44 pb-24">
           <div className="grid gap-16 items-center md:grid-cols-[1.4fr_1fr]">
             <div>
@@ -502,7 +506,14 @@ function HeroVisual() {
             zIndex: 2,
           }}
         >
-          a 28-second pull ✿
+          a 28-second pull{' '}
+          <Flower
+            size={18}
+            color="var(--bone)"
+            centerColor="var(--mustard, #d4972e)"
+            spin
+            style={{ verticalAlign: '-3px', marginLeft: 2 }}
+          />
         </span>
       </div>
 

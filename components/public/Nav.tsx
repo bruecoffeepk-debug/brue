@@ -1,11 +1,11 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Menu, X } from 'lucide-react';
 import { OpenStatusChip } from './OpenStatus';
+import Wordmark from '@/components/brand/Wordmark';
 
 const LINKS = [
   ['/home', 'Home'],
@@ -45,14 +45,7 @@ export default function Nav() {
           }}
         >
           <Link href="/home" aria-label="BRUE home" className="flex items-center">
-            <Image
-              src="/Brue.png"
-              alt="BRUE"
-              width={140}
-              height={44}
-              priority
-              className="h-7 w-auto"
-            />
+            <Wordmark tone="terra" size={30} />
           </Link>
 
           <div className="hidden md:flex items-center gap-8">
@@ -106,7 +99,7 @@ export default function Nav() {
           style={{ background: 'var(--ink)', color: 'var(--bone)' }}
         >
           <div className="flex items-center justify-between h-20 px-7">
-            <Image src="/Brue_W.png" alt="BRUE" width={120} height={40} className="h-8 w-auto" />
+            <Wordmark tone="bone" size={34} />
             <button onClick={() => setOpen(false)} aria-label="Close" className="p-2">
               <X size={26} />
             </button>

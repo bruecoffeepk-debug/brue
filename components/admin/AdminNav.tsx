@@ -1,10 +1,10 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Coffee, FolderOpen, Home, LayoutGrid, LogOut, ExternalLink, Receipt } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import Wordmark from '@/components/brand/Wordmark';
 
 const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutGrid, exact: true },
@@ -35,7 +35,7 @@ export default function AdminNav({ email }: { email: string }) {
     >
       <div className="px-6 pt-7 pb-5 relative z-[2]">
         <Link href="/" className="inline-flex items-center gap-2">
-          <Image src="/Brue.png" alt="BRUE" width={120} height={36} className="h-7 w-auto" />
+          <Wordmark tone="terra" size={28} />
         </Link>
         <div
           className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-full"

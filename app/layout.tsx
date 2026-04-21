@@ -37,7 +37,8 @@ export const metadata: Metadata = {
   title: 'BRUE — Cold · Coffee · Juices · Karachi',
   description:
     "Karachi's favourite specialty coffee. Fifty drinks, cold-pressed juices, single-origin espresso — made in Karachi, for Karachi.",
-  icons: { icon: '/Brue_DP_Orange.png' },
+  // Favicon comes from app/icon.svg (brand flower mark, transparent).
+  // OpenGraph image still uses the square JPEG — social previews can't eat SVG.
   openGraph: {
     title: 'BRUE — Cold · Coffee · Juices · Karachi',
     description: 'Specialty coffee, cold-pressed juices, fifty drinks. Made slow.',

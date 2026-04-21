@@ -1,8 +1,10 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { Instagram, MessageCircle, MapPin, Bike } from 'lucide-react';
 import { SHOP } from '@/lib/shop';
 import { isOpenNow, statusLabel } from '@/lib/hours';
+import Wordmark from '@/components/brand/Wordmark';
+import Flower from '@/components/brand/Flower';
+import FlowerField from '@/components/brand/FlowerField';
 
 export default function Footer() {
   const wa = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
@@ -13,6 +15,9 @@ export default function Footer() {
       className="grain relative overflow-hidden"
       style={{ background: 'var(--ink)', color: 'var(--bone)', borderTop: '3px solid var(--terra)' }}
     >
+      {/* Ambient flowers drifting behind the big editorial mark */}
+      <FlowerField density={10} seed={11} tone="terra" />
+
       {/* Big editorial mark */}
       <div className="relative z-[2] max-w-[1400px] mx-auto px-7 pt-24 pb-10 text-center">
         <h3
@@ -21,8 +26,12 @@ export default function Footer() {
         >
           Brewed <span className="ital" style={{ color: 'var(--terra)' }}>in</span> Karachi.
         </h3>
-        <p className="script mt-4" style={{ color: 'var(--mustard)', fontSize: 28 }}>
-          — see you tomorrow ✿
+        <p
+          className="script mt-4 inline-flex items-center gap-2"
+          style={{ color: 'var(--mustard)', fontSize: 28 }}
+        >
+          — see you tomorrow
+          <Flower size={22} color="var(--mustard, #d4972e)" centerColor="var(--terra)" spin />
         </p>
       </div>
 
@@ -34,7 +43,9 @@ export default function Footer() {
         }}
       >
         <div>
-          <Image src="/Brue_W.png" alt="BRUE" width={180} height={56} className="h-11 w-auto mb-5" />
+          <div className="mb-5">
+            <Wordmark tone="bone" size={44} />
+          </div>
           <p
             className="fraunces italic"
             style={{ fontSize: 17, lineHeight: 1.5, color: 'rgba(244,234,218,0.85)', maxWidth: 320 }}
@@ -119,8 +130,12 @@ export default function Footer() {
         >
           © BRUE {new Date().getFullYear()} · ALL RIGHTS RESERVED
         </small>
-        <span className="script" style={{ color: 'var(--terra)', fontSize: 24 }}>
-          made with love in Karachi ✿
+        <span
+          className="script inline-flex items-center gap-2"
+          style={{ color: 'var(--terra)', fontSize: 24 }}
+        >
+          made with love in Karachi
+          <Flower size={18} color="var(--terra)" centerColor="var(--mustard, #d4972e)" spin />
         </span>
         <small
           style={{ fontSize: 10, letterSpacing: '0.22em', textTransform: 'uppercase', color: 'rgba(244,234,218,0.5)' }}
@@ -129,9 +144,19 @@ export default function Footer() {
         </small>
       </div>
 
-      {/* watermark logo */}
-      <div className="absolute -bottom-16 -right-10 opacity-[0.04] pointer-events-none z-[1]">
-        <Image src="/Brue_W.png" alt="" width={520} height={200} />
+      {/* giant watermark flower */}
+      <div
+        aria-hidden
+        className="absolute pointer-events-none z-[1]"
+        style={{
+          right: -80,
+          bottom: -80,
+          width: 420,
+          height: 420,
+          opacity: 0.06,
+        }}
+      >
+        <Flower size="100%" color="var(--bone)" centerColor="var(--terra)" spin />
       </div>
     </footer>
   );

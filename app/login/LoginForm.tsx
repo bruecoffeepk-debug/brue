@@ -1,11 +1,12 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
+import Wordmark from '@/components/brand/Wordmark';
+import Flower from '@/components/brand/Flower';
 
 export default function LoginForm() {
   const router = useRouter();
@@ -47,7 +48,7 @@ export default function LoginForm() {
         <div className="absolute inset-0 grain pointer-events-none" style={{ opacity: 0.4 }} />
         <div className="relative z-[2] max-w-md">
           <Link href="/" className="inline-flex items-center gap-2 mb-12">
-            <Image src="/Brue_W.png" alt="BRUE" width={140} height={44} className="h-9 w-auto" />
+            <Wordmark tone="bone" size={36} />
           </Link>
           <span className="eyebrow" style={{ color: 'var(--mustard)' }}>
             Staff & Admin · No. 001
@@ -66,10 +67,11 @@ export default function LoginForm() {
             for both — your role decides what you see.
           </p>
           <p
-            className="script mt-8"
+            className="script mt-8 inline-flex items-center gap-2"
             style={{ color: 'var(--terra-soft)', fontSize: 22, transform: 'rotate(-2deg)' }}
           >
-            see you behind the bar ✿
+            see you behind the bar
+            <Flower size={20} color="var(--terra-soft)" centerColor="var(--mustard, #d4972e)" spin />
           </p>
         </div>
       </div>
@@ -81,7 +83,7 @@ export default function LoginForm() {
       >
         <div className="w-full max-w-sm">
           <div className="md:hidden mb-8">
-            <Image src="/Brue.png" alt="BRUE" width={140} height={40} className="h-8 w-auto" />
+            <Wordmark tone="terra" size={32} />
           </div>
 
           <span className="eyebrow">Welcome back</span>

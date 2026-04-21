@@ -1,6 +1,8 @@
 import { Clock, Instagram, MapPin, MessageCircle, Phone, Navigation, ExternalLink } from 'lucide-react';
 import { SHOP } from '@/lib/shop';
 import { isOpenNow, statusLabel } from '@/lib/hours';
+import FlowerField from '@/components/brand/FlowerField';
+import Flower from '@/components/brand/Flower';
 
 export const metadata = { title: 'Find Us — BRUE' };
 
@@ -20,13 +22,19 @@ export default function FindUsPage() {
     <>
       {/* ─── HEADER ─────────────────────────────────────── */}
       <section
-        className="grain"
+        className="grain relative overflow-hidden"
         style={{ background: 'var(--bone)', paddingTop: 160, paddingBottom: 70 }}
       >
+        <FlowerField density={12} seed={21} tone="terra" />
         <div className="relative z-[2] max-w-[1100px] mx-auto px-7 text-center">
           <span className="eyebrow">{SHOP.city} · {SHOP.country}</span>
-          <h1 className="display mt-5" style={{ fontSize: 'clamp(3rem, 6.6vw, 6.8rem)' }}>
+          <h1
+            className="display mt-5 inline-flex items-baseline justify-center gap-4 flex-wrap"
+            style={{ fontSize: 'clamp(3rem, 6.6vw, 6.8rem)' }}
+          >
             Come <span className="ital">find</span> us.
+            <Flower size={42} color="var(--terra)" centerColor="var(--mustard, #d4972e)" spin
+                    style={{ alignSelf: 'center' }} />
           </h1>
           <p
             className="mt-6 mx-auto"

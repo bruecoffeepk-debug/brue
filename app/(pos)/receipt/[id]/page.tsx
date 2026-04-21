@@ -1,10 +1,10 @@
-import Image from 'next/image';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft } from 'lucide-react';
 import { createClient } from '@/lib/supabase/server';
 import { pkr } from '@/lib/utils';
 import PrintButton from './print-button';
+import Wordmark from '@/components/brand/Wordmark';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,7 +27,7 @@ export default async function ReceiptPage({ params }: { params: { id: string } }
 
       <div className="receipt">
         <div style={{ textAlign: 'center', marginBottom: 8 }}>
-          <Image src="/Brue.png" alt="BRUE" width={120} height={36} style={{ height: 30, width: 'auto', display: 'inline-block' }} />
+          <Wordmark tone="ink" size={26} />
         </div>
         <p style={{ textAlign: 'center', fontSize: 11, marginBottom: 4 }}>Cold · Coffee · Juices</p>
         <p style={{ textAlign: 'center', fontSize: 10 }}>Karachi, Pakistan</p>

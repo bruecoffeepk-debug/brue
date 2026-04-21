@@ -4,7 +4,9 @@ import { createClient } from '@/lib/supabase/server';
 import { pkr } from '@/lib/utils';
 import type { DrinkWithCategory } from '@/lib/utils';
 
-export const revalidate = 60; // ISR — refresh every minute so admin edits show up fast
+// Debug: force-dynamic so every request hits Supabase fresh. Swap back to
+// `export const revalidate = 60` for ISR once stable.
+export const dynamic = 'force-dynamic';
 
 async function getFeatured(): Promise<DrinkWithCategory[]> {
   const supabase = createClient();

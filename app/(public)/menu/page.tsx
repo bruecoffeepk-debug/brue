@@ -2,7 +2,9 @@ import { createClient } from '@/lib/supabase/server';
 import MenuClient from '@/components/public/MenuClient';
 import type { Category, DrinkWithCategory } from '@/lib/utils';
 
-export const revalidate = 30;
+// While debugging empty menu — query Supabase on every request.
+// Switch back to `export const revalidate = 30` once stable for ISR caching.
+export const dynamic = 'force-dynamic';
 
 async function loadMenu(): Promise<{ drinks: DrinkWithCategory[]; categories: Category[] }> {
   const supabase = createClient();

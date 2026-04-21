@@ -3,9 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { Menu, X } from 'lucide-react';
+import { Menu, X, MapPin } from 'lucide-react';
 import { OpenStatusChip } from './OpenStatus';
 import Wordmark from '@/components/brand/Wordmark';
+import ZoneChip from './ZoneChip';
+import { useZone } from '@/lib/zone-context';
 
 const LINKS = [
   ['/home', 'Home'],
@@ -18,6 +20,8 @@ export default function Nav() {
   const pathname = usePathname();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const zone = useZone();
+  const canOrder = zone.canOrder;
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 32);
@@ -76,10 +80,22 @@ export default function Nav() {
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <ZoneChip />
             <OpenStatusChip />
-            <Link href="/menu" className="btn btn-primary btn-sm">
-              Order <span className="arrow">↗</span>
-            </Link>
+            {canOrder ? (
+              <Link href="/menu" className="btn btn-primary btn-sm">
+                Order <span className="arrow">↗</span>
+              </Link>
+            ) : (
+              <button
+                onClick={zone.openGate}
+                className="btn btn-outline btn-sm"
+                title="Pick your delivery area — FB Area + North Nazimabad"
+              >
+                <MapPin size={12} style={{ marginRight: 4 }} />
+                Pick area
+              </button>
+            )}
           </div>
 
           <button
@@ -118,9 +134,28 @@ export default function Nav() {
               </li>
             ))}
             <li className="pt-4">
-              <Link href="/menu" onClick={() => setOpen(false)} className="btn btn-terra">
-                Order Now <span className="arrow">↗</span>
-              </Link>
+              {canOrder ? (
+                <Link href="/menu" onClick={() => setOpen(false)} className="btn btn-terra">
+                  Order Now <span className="arrow">↗</span>
+                </Link>
+              ) : (
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    zone.openGate();
+                  }}
+                  className="btn btn-outline"
+                  style={{ color: 'var(--bone)', borderColor: 'var(--bone)' }}
+                >
+                  <MapPin size={14} style={{ marginRight: 6 }} />
+                  Pick delivery area
+                </button>
+              )}
+            </li>
+            <li>
+              <div style={{ opacity: 0.85 }}>
+                <ZoneChip />
+              </div>
             </li>
           </ul>
         </div>

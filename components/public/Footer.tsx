@@ -98,7 +98,9 @@ export default function Footer() {
             <Bike size={14} /> Bykea
           </li>
           <li className="opacity-70">inDrive</li>
-          <li className="opacity-50" style={{ fontSize: 12 }}>within 2 km of the bar</li>
+          <li className="opacity-50" style={{ fontSize: 12 }}>
+            FB Area · North Nazimabad (14 blocks)
+          </li>
         </FooterCol>
 
         <FooterCol title="Connect">

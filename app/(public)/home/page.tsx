@@ -169,7 +169,7 @@ export default async function HomePage() {
                 display: 'inline-block',
               }}
             >
-              delivery within 2km · bykea · indrive · whatsapp
+              FB area + north nazimabad · bykea · indrive · whatsapp
             </span>
           </div>
         </div>
@@ -380,8 +380,8 @@ export default async function HomePage() {
             <OrderCard
               num="03"
               title="Delivery"
-              body="Within 2 km — book a Bykea or inDrive yourself, or have us coordinate it on WhatsApp."
-              note="2 km zone · live tracking"
+              body="FB Area + North Nazimabad — book a Bykea or inDrive yourself, or have us coordinate it on WhatsApp."
+              note="14 covered blocks · live tracking"
             />
           </div>
         </div>

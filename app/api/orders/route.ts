@@ -14,8 +14,12 @@
 
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { SHOP, type DeliveryMethodId } from '@/lib/shop';
-import { haversineKm } from '@/lib/geo';
+import {
+  SHOP,
+  findDeliveryArea,
+  type DeliveryAreaId,
+  type DeliveryMethodId,
+} from '@/lib/shop';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,9 +36,8 @@ type IncomingPayload = {
   type: 'pickup' | 'delivery';
   delivery?: {
     method: DeliveryMethodId;
-    address: string;
-    lat?: number | null;
-    lng?: number | null;
+    area_id: DeliveryAreaId;
+    street: string;
   };
   notes?: string | null;
   items: IncomingItem[];
@@ -72,35 +75,31 @@ export async function POST(req: Request) {
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
-  // ── delivery validation (2km cap) ──
+  // ── delivery validation (area membership) ──
   let delivery_method: string | null = null;
   let delivery_address: string | null = null;
-  let delivery_lat: number | null = null;
-  let delivery_lng: number | null = null;
-  let delivery_distance_km: number | null = null;
 
   if (body.type === 'delivery') {
     if (!body.delivery) return bad('Delivery details missing');
-    const m = SHOP.delivery.methods.find((x) => x.id === body.delivery!.method);
-    if (!m) return bad('Pick a delivery method');
-    delivery_method = m.id;
-    delivery_address = (body.delivery.address || '').trim();
-    if (!delivery_address) return bad('Delivery address required');
 
-    if (body.delivery.lat != null && body.delivery.lng != null) {
-      delivery_lat = Number(body.delivery.lat);
-      delivery_lng = Number(body.delivery.lng);
-      const km = haversineKm(
-        { lat: SHOP.lat, lng: SHOP.lng },
-        { lat: delivery_lat, lng: delivery_lng }
+    const method = SHOP.delivery.methods.find((x) => x.id === body.delivery!.method);
+    if (!method) return bad('Pick a delivery method');
+    delivery_method = method.id;
+
+    const area = findDeliveryArea(body.delivery.area_id);
+    if (!area) {
+      return bad(
+        `Sorry — your area isn't in our delivery list. We currently cover FB Area + North Nazimabad. Try pickup instead.`
       );
-      delivery_distance_km = Math.round(km * 100) / 100;
-      if (km > SHOP.delivery.radiusKm) {
-        return bad(
-          `Sorry — you're ${delivery_distance_km} km away. We deliver within ${SHOP.delivery.radiusKm} km. Try pickup instead.`
-        );
-      }
     }
+
+    const street = (body.delivery.street || '').trim();
+    if (!street) return bad('Street / house detail required');
+
+    // Compose the single address string the admin sees: area first for quick routing,
+    // then the free-form street / landmark. e.g.
+    //   "FB Area · Block 7 — House 12-C, Sharafabad Rd, near the pharmacy"
+    delivery_address = `${area.cluster} · ${area.label} — ${street}`;
   }
 
   const supabase = createClient();
@@ -128,6 +127,9 @@ export async function POST(req: Request) {
   }
 
   // ── insert order ──
+  // NOTE: delivery_lat / delivery_lng / delivery_distance_km columns may still
+  // exist on the orders table from the old radius-based design. We leave them
+  // null now that coverage is area-based — no schema migration needed.
   const { data: order, error: orderErr } = await supabase
     .from('orders')
     .insert({
@@ -137,9 +139,9 @@ export async function POST(req: Request) {
       order_type: body.type,
       delivery_address,
       delivery_method,
-      delivery_lat,
-      delivery_lng,
-      delivery_distance_km,
+      delivery_lat: null,
+      delivery_lng: null,
+      delivery_distance_km: null,
       payment_method: 'unpaid',
       subtotal,
       discount: 0,

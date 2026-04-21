@@ -193,14 +193,30 @@ export default function FindUsPage() {
         <div className="max-w-[1100px] mx-auto px-7 text-center">
           <span className="eyebrow">Delivery</span>
           <h2 className="display mt-4" style={{ fontSize: 'clamp(2rem, 4.2vw, 3.4rem)' }}>
-            We deliver inside <span className="ital">2 km</span> of the bar.
+            We deliver in <span className="ital">FB Area</span> + <span className="ital">North Nazimabad</span>.
           </h2>
           <p className="mt-5 mx-auto" style={{ maxWidth: 560, color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.7 }}>
-            Tap your location at checkout — if you're inside our zone, pick a rider:
+            Pick your block at the gate — if it's in our covered list, choose a rider:
             <span className="serif italic" style={{ color: 'var(--terra)' }}> Bykea</span>,
             <span className="serif italic" style={{ color: 'var(--terra)' }}> inDrive</span>, or
             we'll coordinate one over WhatsApp.
           </p>
+          <div className="flex justify-center gap-2 mt-6 flex-wrap" style={{ maxWidth: 640, margin: '1.5rem auto 0' }}>
+            {SHOP.delivery.areas.map((a) => (
+              <span
+                key={a.id}
+                className="chip"
+                style={{
+                  borderColor: 'var(--line-strong)',
+                  fontSize: 11,
+                  padding: '5px 10px',
+                }}
+                title={a.cluster}
+              >
+                {a.label}
+              </span>
+            ))}
+          </div>
           <div className="flex justify-center gap-3 mt-7 flex-wrap">
             {SHOP.delivery.methods.map((m) => (
               <span

@@ -45,12 +45,33 @@ export const SHOP = {
   phoneTel: '',
 
   // ── DELIVERY ──────────────────────────────────────────────
+  // Area-based coverage — visitors pick from this curated list at entry.
+  // Anything not in this list is "browse only". Add/remove blocks here
+  // and the welcome gate, nav chip, menu banner and /api/orders guard
+  // will pick it up automatically.
   delivery: {
-    radiusKm: 2, // hard cap — beyond this, the cart blocks delivery
     methods: [
       { id: 'bykea', label: 'Bykea',   note: 'You book on the Bykea app · pay rider' },
       { id: 'indrive', label: 'inDrive', note: 'You book on inDrive app · pay rider' },
       { id: 'whatsapp', label: 'WhatsApp', note: 'We coordinate a rider on WhatsApp' },
+    ] as const,
+    areas: [
+      // FB Area — blocks 4-7 + 10-13
+      { id: 'fb-4',  label: 'Block 4',  cluster: 'FB Area' },
+      { id: 'fb-5',  label: 'Block 5',  cluster: 'FB Area' },
+      { id: 'fb-6',  label: 'Block 6',  cluster: 'FB Area' },
+      { id: 'fb-7',  label: 'Block 7',  cluster: 'FB Area' },
+      { id: 'fb-10', label: 'Block 10', cluster: 'FB Area' },
+      { id: 'fb-11', label: 'Block 11', cluster: 'FB Area' },
+      { id: 'fb-12', label: 'Block 12', cluster: 'FB Area' },
+      { id: 'fb-13', label: 'Block 13', cluster: 'FB Area' },
+      // North Nazimabad — blocks B/F/G/H/L/M
+      { id: 'nn-b',  label: 'Block B',  cluster: 'North Nazimabad' },
+      { id: 'nn-f',  label: 'Block F',  cluster: 'North Nazimabad' },
+      { id: 'nn-g',  label: 'Block G',  cluster: 'North Nazimabad' },
+      { id: 'nn-h',  label: 'Block H',  cluster: 'North Nazimabad' },
+      { id: 'nn-l',  label: 'Block L',  cluster: 'North Nazimabad' },
+      { id: 'nn-m',  label: 'Block M',  cluster: 'North Nazimabad' },
     ] as const,
   },
 
@@ -77,3 +98,28 @@ export const SHOP = {
 } as const;
 
 export type DeliveryMethodId = (typeof SHOP.delivery.methods)[number]['id'];
+export type DeliveryAreaId   = (typeof SHOP.delivery.areas)[number]['id'];
+export type DeliveryArea     = (typeof SHOP.delivery.areas)[number];
+
+/** Look up a covered area by slug. Returns undefined if not covered. */
+export function findDeliveryArea(id: string | null | undefined): DeliveryArea | undefined {
+  if (!id) return undefined;
+  return SHOP.delivery.areas.find((a) => a.id === id);
+}
+
+/** Group the covered areas by cluster (FB Area / North Nazimabad / …) for
+ *  the picker UI. Preserves declaration order within each cluster. */
+export function deliveryAreaClusters(): { cluster: string; areas: DeliveryArea[] }[] {
+  const map = new Map<string, DeliveryArea[]>();
+  for (const a of SHOP.delivery.areas) {
+    if (!map.has(a.cluster)) map.set(a.cluster, []);
+    map.get(a.cluster)!.push(a);
+  }
+  return Array.from(map, ([cluster, areas]) => ({ cluster, areas }));
+}
+
+/** Short marketing summary: "FB Area + North Nazimabad · 14 blocks". */
+export function deliverySummary(): string {
+  const clusters = deliveryAreaClusters();
+  return `${clusters.map((c) => c.cluster).join(' + ')} · ${SHOP.delivery.areas.length} blocks`;
+}

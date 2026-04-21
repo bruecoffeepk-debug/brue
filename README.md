@@ -11,9 +11,10 @@ Backed by Supabase, deployed to Vercel.
 - **Public** — `/`, `/home`, `/menu`, `/about`, `/find-us`
   - Live menu pulled from Supabase. Browse-by-category, search, cart, checkout.
   - **Checkout drawer** collects name, phone, pickup or delivery, delivery method
-    (Bykea / inDrive / WhatsApp), GPS-verified address, and notes.
-    Enforces a **2 km delivery radius** using the browser Geolocation API +
-    haversine distance.
+    (Bykea / inDrive / WhatsApp), the block the rider is headed to, street
+    detail, and notes. Coverage is **area-based**: the welcome gate makes the
+    visitor pick a covered block (FB Area + North Nazimabad, configured in
+    `lib/shop.ts`) before ordering unlocks.
   - **Live open/closed chip** in the nav + a soft **closed-right-now modal**
     that greets visitors when the shop is shut (dismissable for the session,
     auto-closes when the shop opens).
@@ -96,22 +97,22 @@ To use `/admin` or `/pos`, create a user (see step 2.3 below) and visit `/login`
 
 ## 3 · Configure the shop (`lib/shop.ts`)
 
-Every piece of customer-facing info — name, pin, socials, hours, delivery
-radius, delivery methods — lives in one file: **`lib/shop.ts`**. Nothing
-else hard-codes these. Edit once, it updates everywhere (find-us page,
-footer, checkout, receipt, open/closed chip).
+Every piece of customer-facing info — name, pin, socials, hours, covered
+delivery areas, delivery methods — lives in one file: **`lib/shop.ts`**.
+Nothing else hard-codes these. Edit once, it updates everywhere (welcome
+gate, find-us page, footer, checkout, receipt, open/closed chip).
 
 You must personalise:
 
 | Field | What to do |
 | --- | --- |
-| `lat`, `lng` | **The values shipped are placeholders.** Open Google Maps, right-click the exact BRUE pin, click the coordinates at the top of the menu — they copy to your clipboard as `24.xxxxx, 67.xxxxx`. Paste into `lib/shop.ts`. The 2 km delivery check and "Directions" button both depend on this. |
+| `lat`, `lng` | **The values shipped are placeholders.** Open Google Maps, right-click the exact BRUE pin, click the coordinates at the top of the menu — they copy to your clipboard as `24.xxxxx, 67.xxxxx`. Paste into `lib/shop.ts`. The `/find-us` embed and "Directions" button both depend on this. |
 | `googleMapsLink` | The customer-facing share link (`https://share.google/…`). Used on `/find-us` to open the pin in Google Maps. |
 | `instagram.handle` / `instagram.url` | Your real Instagram. Used on `/find-us` and in the footer. |
 | `phoneDisplay` / `phoneTel` | Optional — only fill in if you want the phone chip on `/find-us` visible. |
 | `hours` | Array of `{ day, open, close }` per day of week. `close > 24` means past midnight (`25` = 1 am next day). |
 | `hoursSummary` | Short human string shown in the nav / footer, e.g. `"Mon — Sun · 8 am — late"`. |
-| `delivery.radiusKm` | Defaults to `2`. Checkout will refuse addresses further than this. |
+| `delivery.areas` | List of covered blocks `{ id, label, cluster }`. Adding/removing entries updates the welcome gate, zone chip, find-us page and server-side order validation automatically. Visitors who previously picked a removed block get re-prompted on their next visit. |
 | `delivery.methods` | Edit labels / notes for Bykea, inDrive, WhatsApp. |
 
 Also set `NEXT_PUBLIC_WHATSAPP_NUMBER` in env (digits only, country code first,
@@ -221,7 +222,7 @@ app/
   (public)/       # / · /home · /menu · /about · /find-us — ISR, no auth
   (admin)/        # /admin · /admin/drinks · /admin/categories · /admin/orders — auth-gated
   (pos)/          # /pos — auth-gated tap terminal
-  api/orders/     # POST endpoint — validates, geo-checks, writes customer + order + items
+  api/orders/     # POST endpoint — validates area membership, writes customer + order + items
   r/[id]/         # public printable receipt (noindex)
   login/          # /login — Supabase email/password
   globals.css     # design tokens + .btn/.input/.field-group/.display
@@ -233,7 +234,7 @@ lib/
   supabase/       # browser + server SSR clients
   shop.ts         # SINGLE source of truth for shop info (see § 3)
   hours.ts        # Karachi-time open/closed logic (server-TZ-independent)
-  geo.ts          # haversineKm + getBrowserPosition
+  zone-context.tsx # ZoneProvider — tracks visitor's picked delivery area (localStorage)
   utils.ts        # MenuItem, Category types, slugify(), money helpers
 supabase/
   schema.sql                                # base tables + 50 seeded drinks

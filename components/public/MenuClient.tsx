@@ -2,11 +2,11 @@
 
 import Image from 'next/image';
 import { useMemo, useState } from 'react';
-import { Search, Plus, Minus, X, ShoppingBag, MapPin, Loader2, Check, ExternalLink } from 'lucide-react';
+import { Search, Plus, Minus, X, ShoppingBag, MapPin, Loader2, Check, Lock } from 'lucide-react';
 import { pkr } from '@/lib/utils';
 import type { Category, DrinkWithCategory } from '@/lib/utils';
-import { SHOP } from '@/lib/shop';
-import { getBrowserPosition, haversineKm } from '@/lib/geo';
+import { SHOP, deliverySummary } from '@/lib/shop';
+import { useZone } from '@/lib/zone-context';
 
 type CartLine = { id: string; name: string; price: number; cost: number; qty: number; photo: string | null };
 type Step = 'cart' | 'details' | 'placed';
@@ -22,6 +22,8 @@ export default function MenuClient({
   const [query, setQuery] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const zone = useZone();
+  const canOrder = zone.canOrder;
 
   const startingFrom = useMemo(
     () =>
@@ -59,6 +61,10 @@ export default function MenuClient({
 
   function addToCart(d: DrinkWithCategory) {
     if (!d.in_stock) return;
+    if (!canOrder) {
+      zone.openGate();
+      return;
+    }
     setCart((c) => {
       const exists = c.find((l) => l.id === d.id);
       if (exists) return c.map((l) => (l.id === d.id ? { ...l, qty: l.qty + 1 } : l));
@@ -75,6 +81,9 @@ export default function MenuClient({
         .filter((l) => l.qty > 0)
     );
   }
+
+  const areaCount = SHOP.delivery.areas.length;
+  const clusterCount = new Set(SHOP.delivery.areas.map((a) => a.cluster)).size;
 
   return (
     <>
@@ -100,9 +109,10 @@ export default function MenuClient({
             className="mt-6"
             style={{ maxWidth: 540, color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.65 }}
           >
-            Espresso classics, cold-brewed coffee, blended frappés and fresh lemonades. Delivery
-            inside <span style={{ color: 'var(--terra)' }}>{SHOP.delivery.radiusKm} km</span> of the
-            bar — Bykea, inDrive or WhatsApp.
+            Espresso classics, cold-brewed coffee, blended frappés and fresh lemonades. Delivering
+            to{' '}
+            <span style={{ color: 'var(--terra)' }}>{deliverySummary()}</span> — Bykea, inDrive or
+            WhatsApp.
           </p>
 
           <div
@@ -116,7 +126,7 @@ export default function MenuClient({
           >
             <Stat num={initialDrinks.length} label="drinks" italic />
             <Stat num={String(startingFrom)} label="starting pkr" />
-            <Stat num="2 km" label="delivery zone" />
+            <Stat num={`${areaCount} blocks`} label={`${clusterCount} neighbourhoods`} />
             <span />
             <span className="chip">
               <span className="dot" />
@@ -125,6 +135,10 @@ export default function MenuClient({
           </div>
         </div>
       </section>
+
+      {!canOrder && zone.resolved && (
+        <BrowseModeBanner status={zone.status} onRecheck={zone.openGate} />
+      )}
 
       {/* ─── STICKY TOOLBAR ─────────────────────────────── */}
       <div
@@ -227,7 +241,12 @@ export default function MenuClient({
 
               <div className="grid gap-x-6 gap-y-10 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
                 {items.map((d) => (
-                  <DrinkCard key={d.id} drink={d} onAdd={() => addToCart(d)} />
+                  <DrinkCard
+                    key={d.id}
+                    drink={d}
+                    onAdd={() => addToCart(d)}
+                    canOrder={canOrder}
+                  />
                 ))}
               </div>
             </div>
@@ -297,19 +316,17 @@ function CheckoutDrawer({
   onClose: () => void;
   onChangeQty: (id: string, delta: number) => void;
 }) {
+  const zone = useZone();
   const [step, setStep] = useState<Step>('cart');
 
-  // form state
+  // form state. Delivery address is pre-tagged with the visitor's
+  // already-picked area — we only need the street/house detail from them.
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [type, setType] = useState<'pickup' | 'delivery'>('pickup');
+  const [type, setType] = useState<'pickup' | 'delivery'>(zone.canOrder ? 'delivery' : 'pickup');
   const [method, setMethod] = useState<string>(SHOP.delivery.methods[0].id);
-  const [address, setAddress] = useState('');
+  const [street, setStreet] = useState('');
   const [notes, setNotes] = useState('');
-  const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
-  const [distance, setDistance] = useState<number | null>(null);
-  const [locating, setLocating] = useState(false);
-  const [locError, setLocError] = useState<string | null>(null);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
@@ -319,31 +336,18 @@ function CheckoutDrawer({
     receiptUrl: string;
   } | null>(null);
 
-  const radius = SHOP.delivery.radiusKm;
-  const tooFar = type === 'delivery' && distance != null && distance > radius;
-
-  async function detectLocation() {
-    setLocError(null);
-    setLocating(true);
-    try {
-      const pos = await getBrowserPosition();
-      const c = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      setCoords(c);
-      const km = haversineKm({ lat: SHOP.lat, lng: SHOP.lng }, c);
-      setDistance(Math.round(km * 100) / 100);
-    } catch (e: any) {
-      setLocError(e?.message || 'Could not get your location');
-    } finally {
-      setLocating(false);
-    }
-  }
+  // Hard rule: delivery requires a picked area. If the visitor somehow got
+  // here without one, we steer them back to the gate.
+  const needsArea = type === 'delivery' && !zone.area;
 
   async function placeOrder() {
     setSubmitErr(null);
     if (!name.trim()) return setSubmitErr('Add your name');
     if (!phone.trim()) return setSubmitErr('Add your WhatsApp number');
-    if (type === 'delivery' && !address.trim()) return setSubmitErr('Add a delivery address');
-    if (tooFar) return setSubmitErr(`You're ${distance} km away — outside our ${radius} km zone.`);
+    if (type === 'delivery') {
+      if (!zone.area) return setSubmitErr('Pick a delivery area first');
+      if (!street.trim()) return setSubmitErr('Add your street / house detail');
+    }
 
     setSubmitting(true);
     try {
@@ -353,9 +357,10 @@ function CheckoutDrawer({
         body: JSON.stringify({
           customer: { name, phone },
           type,
-          delivery: type === 'delivery'
-            ? { method, address, lat: coords?.lat ?? null, lng: coords?.lng ?? null }
-            : undefined,
+          delivery:
+            type === 'delivery' && zone.area
+              ? { method, area_id: zone.area.id, street }
+              : undefined,
           notes,
           items: cart.map((l) => ({
             id: l.id, name: l.name, price: l.price, cost: l.cost, quantity: l.qty,
@@ -377,6 +382,10 @@ function CheckoutDrawer({
     if (!placed) return '#';
     const number = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
     const lines = cart.map((l) => `• ${l.qty} × ${l.name} — ${pkr(l.price * l.qty)}`).join('%0A');
+    const addressLine =
+      type === 'delivery' && zone.area
+        ? `${zone.area.cluster} · ${zone.area.label} — ${street}`
+        : '';
     const body =
       `Hi BRUE 👋 — Order *#${placed.order_number}* for *${name}*` +
       `%0A%0A${lines}` +
@@ -384,7 +393,7 @@ function CheckoutDrawer({
       `%0AType: ${type}` +
       (type === 'delivery'
         ? `%0AMethod: ${SHOP.delivery.methods.find((m) => m.id === method)?.label}` +
-          `%0AAddress: ${encodeURIComponent(address)}`
+          `%0AAddress: ${encodeURIComponent(addressLine)}`
         : '') +
       `%0A%0AReceipt: ${placed.receiptUrl}`;
     return number ? `https://wa.me/${number}?text=${body}` : placed.receiptUrl;
@@ -534,6 +543,61 @@ function CheckoutDrawer({
 
               {type === 'delivery' && (
                 <>
+                  {/* Area pill — immutable here; change via the gate. */}
+                  <div className="field-group">
+                    <label>Your area</label>
+                    {zone.area ? (
+                      <div
+                        className="flex items-center gap-3 rounded-xl px-4 py-3"
+                        style={{
+                          background: 'rgba(107,122,83,0.1)',
+                          border: '1px solid rgba(107,122,83,0.25)',
+                        }}
+                      >
+                        <span
+                          className="inline-flex items-center justify-center"
+                          style={{
+                            width: 30, height: 30, borderRadius: 999,
+                            background: 'rgba(107,122,83,0.25)', color: 'var(--sage)',
+                          }}
+                        >
+                          <Check size={14} />
+                        </span>
+                        <div className="flex-1">
+                          <div className="serif" style={{ fontSize: 16 }}>
+                            {zone.area.label}
+                          </div>
+                          <div style={{ color: 'var(--ink-muted)', fontSize: 12 }}>
+                            {zone.area.cluster} · covered
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={zone.openGate}
+                          className="text-[11px] underline"
+                          style={{ color: 'var(--ink-muted)' }}
+                        >
+                          Change
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={zone.openGate}
+                        className="rounded-xl px-4 py-3 w-full text-left"
+                        style={{
+                          background: 'rgba(196,69,38,0.08)',
+                          border: '1px solid rgba(196,69,38,0.25)',
+                          color: 'var(--terra-deep)',
+                          fontSize: 13,
+                        }}
+                      >
+                        <strong>Pick your area →</strong> we only deliver inside FB Area +
+                        North Nazimabad blocks.
+                      </button>
+                    )}
+                  </div>
+
                   <div className="field-group">
                     <label>Delivery method</label>
                     <div className="grid gap-2">
@@ -574,73 +638,21 @@ function CheckoutDrawer({
                   </div>
 
                   <div className="field-group">
-                    <label htmlFor="ck-addr">Address</label>
+                    <label htmlFor="ck-street">Street / house detail</label>
                     <textarea
-                      id="ck-addr"
+                      id="ck-street"
                       className="textarea"
                       rows={2}
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="House #, street, area — and a landmark"
+                      value={street}
+                      onChange={(e) => setStreet(e.target.value)}
+                      placeholder="House #, street, landmark — so the rider can find you"
                     />
-                  </div>
-
-                  {/* 2km zone check */}
-                  <div
-                    className="rounded-xl px-4 py-3.5"
-                    style={{
-                      background: tooFar ? 'rgba(196,69,38,0.08)' : 'rgba(107,122,83,0.08)',
-                      border: `1px solid ${tooFar ? 'rgba(196,69,38,0.25)' : 'rgba(107,122,83,0.25)'}`,
-                    }}
-                  >
-                    <div className="flex items-center gap-2" style={{ fontSize: 13 }}>
-                      <MapPin size={14} style={{ color: tooFar ? 'var(--terra)' : 'var(--sage)' }} />
-                      <span style={{ fontWeight: 500 }}>
-                        Delivery zone · {radius} km from BRUE
-                      </span>
-                    </div>
-                    <p style={{ color: 'var(--ink-muted)', fontSize: 12, marginTop: 4 }}>
-                      Tap below to confirm you're inside the zone — we use your phone's GPS, not
-                      your address.
+                    <p
+                      style={{ color: 'var(--ink-muted)', fontSize: 11, marginTop: 6 }}
+                    >
+                      Area is locked to <strong>{zone.area?.label ?? '—'}</strong>. Change it from
+                      the pill above if you moved.
                     </p>
-                    <div className="flex items-center gap-2 mt-3 flex-wrap">
-                      <button
-                        type="button"
-                        onClick={detectLocation}
-                        disabled={locating}
-                        className="btn btn-outline btn-sm"
-                      >
-                        {locating ? <Loader2 size={12} className="animate-spin" /> : <MapPin size={12} />}
-                        {coords ? 'Re-check location' : 'Use my location'}
-                      </button>
-                      {distance != null && (
-                        <span
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-                          style={{
-                            background: tooFar ? 'rgba(196,69,38,0.12)' : 'rgba(107,122,83,0.16)',
-                            color: tooFar ? 'var(--terra-deep)' : 'var(--sage)',
-                            fontSize: 12, fontWeight: 500,
-                          }}
-                        >
-                          {tooFar ? '✗' : <Check size={11} />}
-                          {distance} km away
-                        </span>
-                      )}
-                      <a
-                        href={SHOP.directionsLink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-1 text-[11px] underline"
-                        style={{ color: 'var(--ink-muted)' }}
-                      >
-                        <ExternalLink size={10} /> see the bar on the map
-                      </a>
-                    </div>
-                    {locError && (
-                      <p style={{ color: 'var(--terra-deep)', fontSize: 12, marginTop: 6 }}>
-                        {locError}
-                      </p>
-                    )}
                   </div>
                 </>
               )}
@@ -691,9 +703,9 @@ function CheckoutDrawer({
                 </button>
                 <button
                   onClick={placeOrder}
-                  disabled={submitting || tooFar}
+                  disabled={submitting || needsArea}
                   className="btn btn-terra"
-                  style={{ flex: 1, opacity: submitting || tooFar ? 0.6 : 1 }}
+                  style={{ flex: 1, opacity: submitting || needsArea ? 0.6 : 1 }}
                 >
                   {submitting
                     ? (<><Loader2 size={14} className="animate-spin" /> Placing…</>)
@@ -829,8 +841,8 @@ function Stat({ num, label, italic }: {
   );
 }
 
-function DrinkCard({ drink, onAdd }: {
-  drink: DrinkWithCategory; onAdd: () => void;
+function DrinkCard({ drink, onAdd, canOrder }: {
+  drink: DrinkWithCategory; onAdd: () => void; canOrder: boolean;
 }) {
   const sold = !drink.in_stock;
   const photo = drink.photo || '/Brue_DP_Orange.png';
@@ -892,13 +904,76 @@ function DrinkCard({ drink, onAdd }: {
         onClick={onAdd}
         className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium"
         style={{
-          color: sold ? 'var(--ink-muted)' : 'var(--ink)',
+          color: sold
+            ? 'var(--ink-muted)'
+            : canOrder
+            ? 'var(--ink)'
+            : 'var(--ink-muted)',
           letterSpacing: '0.04em',
           cursor: sold ? 'not-allowed' : 'pointer',
         }}
       >
-        {sold ? '— sold out —' : (<>Add to cart <Plus size={12} /></>)}
+        {sold ? (
+          '— sold out —'
+        ) : canOrder ? (
+          <>Add to cart <Plus size={12} /></>
+        ) : (
+          <>Pick your area <Lock size={11} /></>
+        )}
       </button>
+    </div>
+  );
+}
+
+/* ─── Browse-mode banner (shown when visitor hasn't picked a covered area) ─── */
+function BrowseModeBanner({
+  status,
+  onRecheck,
+}: {
+  status: 'unknown' | 'browsing' | 'in';
+  onRecheck: () => void;
+}) {
+  const browsing = status === 'browsing';
+  return (
+    <div
+      style={{
+        background: 'rgba(28,23,18,0.05)',
+        borderTop: '1px solid var(--line)',
+        borderBottom: '1px solid var(--line)',
+      }}
+    >
+      <div className="max-w-[1400px] mx-auto px-7 lg:px-10 py-3 flex items-center gap-4 flex-wrap">
+        <span
+          className="inline-flex items-center gap-2"
+          style={{ fontSize: 12, color: 'var(--ink-soft)' }}
+        >
+          <MapPin size={13} style={{ color: 'var(--ink-muted)' }} />
+          {browsing ? (
+            <>
+              Browse mode — your area isn't on our delivery list yet. Pickup at the bar is open
+              to everyone.
+            </>
+          ) : (
+            <>Pick your delivery area to unlock ordering — FB Area + North Nazimabad.</>
+          )}
+        </span>
+        <button
+          onClick={onRecheck}
+          className="ml-auto inline-flex items-center gap-1.5 rounded-full"
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            fontWeight: 600,
+            color: 'var(--ink)',
+            background: 'var(--bone)',
+            border: '1px solid var(--line-strong)',
+            padding: '6px 12px',
+          }}
+        >
+          <MapPin size={11} /> {browsing ? 'Pick an area' : 'Set area'}
+        </button>
+      </div>
     </div>
   );
 }

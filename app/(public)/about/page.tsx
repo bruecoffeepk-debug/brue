@@ -59,13 +59,32 @@ export default function AboutPage() {
               transform: 'rotate(-3deg)',
             }}
           >
-            <Image
-              src="/drinks/creme-brulee.jpg"
-              alt="Crème brûlée latte"
-              fill
-              sizes="(max-width: 768px) 100vw, 30vw"
-              className="object-cover"
-            />
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/craft-grind-poster.jpg"
+              aria-label="Coffee being ground at BRUE"
+              className="absolute inset-0 h-full w-full object-cover"
+            >
+              <source src="/craft-grind.webm" type="video/webm" />
+              <source src="/craft-grind.mp4" type="video/mp4" />
+            </video>
+            <span
+              className="script absolute"
+              style={{
+                left: 12,
+                bottom: 10,
+                color: 'var(--bone)',
+                fontSize: 16,
+                transform: 'rotate(-1deg)',
+                textShadow: '0 2px 8px rgba(0,0,0,0.55)',
+              }}
+            >
+              the grind ✿
+            </span>
           </div>
         </div>
       </section>

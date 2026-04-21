@@ -175,6 +175,155 @@ export default async function HomePage() {
         </div>
       </section>
 
+      {/* ─── THE CRAFT · GROUND TO ORDER ─────────────────── */}
+      <section
+        className="grain relative overflow-hidden"
+        style={{ background: 'var(--ink)', color: 'var(--bone)', padding: '110px 0' }}
+      >
+        <FlowerField density={8} seed={29} tone="terra" />
+        <div className="relative z-[2] max-w-[1300px] mx-auto px-7 lg:px-10 grid gap-12 md:grid-cols-[1fr_1.05fr] items-center">
+          {/* video — portrait 9:16 */}
+          <div
+            className="relative overflow-hidden mx-auto"
+            style={{
+              width: '100%',
+              maxWidth: 440,
+              aspectRatio: '9 / 16',
+              borderRadius: 22,
+              boxShadow:
+                '0 40px 80px -25px rgba(0,0,0,0.55), 0 18px 40px -22px rgba(0,0,0,0.5)',
+              border: '1px solid rgba(244,234,218,0.08)',
+            }}
+          >
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              preload="metadata"
+              poster="/craft-grind-poster.jpg"
+              aria-label="Coffee being ground at BRUE"
+              className="absolute inset-0 h-full w-full object-cover"
+            >
+              <source src="/craft-grind.webm" type="video/webm" />
+              <source src="/craft-grind.mp4" type="video/mp4" />
+            </video>
+            {/* subtle vignette */}
+            <div
+              className="absolute inset-0 pointer-events-none"
+              style={{
+                background:
+                  'linear-gradient(to top, rgba(28,23,18,0.35), transparent 35%, transparent 70%, rgba(28,23,18,0.18))',
+              }}
+            />
+            {/* floating script caption */}
+            <span
+              className="script absolute inline-flex items-center gap-2"
+              style={{
+                left: 20,
+                bottom: 18,
+                color: 'var(--bone)',
+                fontSize: 22,
+                transform: 'rotate(-2deg)',
+                textShadow: '0 2px 10px rgba(0,0,0,0.6)',
+                zIndex: 2,
+              }}
+            >
+              every cup starts here
+              <Flower size={18} color="var(--mustard, #d4972e)" centerColor="var(--terra)" spin />
+            </span>
+            {/* corner chip */}
+            <span
+              className="absolute"
+              style={{
+                top: 14,
+                left: 14,
+                background: 'rgba(252,247,235,0.9)',
+                color: 'var(--ink)',
+                fontSize: 10,
+                letterSpacing: '0.22em',
+                textTransform: 'uppercase',
+                padding: '5px 10px',
+                borderRadius: 999,
+                fontWeight: 600,
+              }}
+            >
+              Step 01 · Grind
+            </span>
+          </div>
+
+          {/* copy */}
+          <div>
+            <span
+              className="eyebrow"
+              style={{ color: 'var(--mustard)' }}
+            >
+              The Craft · No. 001
+            </span>
+            <h2
+              className="display mt-5"
+              style={{
+                fontSize: 'clamp(2.6rem, 5.4vw, 5rem)',
+                lineHeight: 1,
+                color: 'var(--bone)',
+              }}
+            >
+              Ground <span className="ital" style={{ color: 'var(--terra)' }}>to order</span>.
+            </h2>
+            <p
+              className="mt-6"
+              style={{
+                color: 'rgba(244,234,218,0.78)',
+                fontSize: 17,
+                lineHeight: 1.65,
+                maxWidth: 520,
+              }}
+            >
+              Single-origin beans, weighed to the gram, ground the moment you order.
+              Because the fifteen seconds between grinder and portafilter is the
+              difference between a coffee and a <em className="fraunces italic">28-second pull</em>.
+            </p>
+
+            {/* recipe strip */}
+            <ul
+              className="mt-8 flex flex-wrap gap-x-8 gap-y-3"
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: 0,
+                color: 'rgba(244,234,218,0.9)',
+                fontSize: 13,
+                letterSpacing: '0.14em',
+                textTransform: 'uppercase',
+              }}
+            >
+              <li>18g <span style={{ opacity: 0.55 }}>in</span></li>
+              <li>36g <span style={{ opacity: 0.55 }}>out</span></li>
+              <li>93°<span style={{ opacity: 0.55 }}>C</span></li>
+              <li>9 <span style={{ opacity: 0.55 }}>bar</span></li>
+              <li>28<span style={{ opacity: 0.55 }}>s</span></li>
+            </ul>
+
+            <div className="mt-9 flex flex-wrap items-center gap-5">
+              <Link href="/menu" className="btn btn-terra">
+                See the menu <span className="arrow">↗</span>
+              </Link>
+              <span
+                className="script"
+                style={{
+                  color: 'var(--mustard)',
+                  fontSize: 22,
+                  transform: 'rotate(-2deg)',
+                  display: 'inline-block',
+                }}
+              >
+                fifty drinks, one obsession
+              </span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ─── BRAND STATEMENT ────────────────────────────── */}
       <section className="grain" style={{ background: 'var(--bone)', padding: '110px 0' }}>
         <div className="relative z-[2] max-w-[1100px] mx-auto px-7 text-center">
@@ -467,16 +616,16 @@ function HeroVisual() {
           loop
           playsInline
           preload="metadata"
-          poster="/drinks/spanish-latte.jpg"
-          aria-label="Espresso shot being pulled at BRUE"
+          poster="/hero-pull-poster.jpg"
+          aria-label="Latte being poured at BRUE"
           className="absolute inset-0 h-full w-full object-cover"
         >
           <source src="/hero-pull.webm" type="video/webm" />
           <source src="/hero-pull.mp4" type="video/mp4" />
           {/* graceful fallback if the browser refuses to load any video source */}
           <Image
-            src="/drinks/spanish-latte.jpg"
-            alt="BRUE Spanish Latte"
+            src="/hero-pull-poster.jpg"
+            alt="BRUE latte pour"
             fill
             priority
             sizes="(max-width: 1024px) 100vw, 40vw"

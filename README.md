@@ -123,11 +123,27 @@ Drop these files into `/public/` (they don't ship with the repo — staff/design
 
 | Path | What |
 | --- | --- |
-| `/public/hero-pull.mp4` *(and optional `.webm`)* | 4-8 s looping espresso-pull clip. Silent — `<video>` is `muted autoplay loop`. 720p is plenty. |
-| `/public/drinks/*.jpg` | Hero fallback + drink photos. Uploads from `/admin/drinks/new` also end up here (via Supabase Storage). |
+| `/public/hero-pull.mp4` *(+ `.webm`, `-poster.jpg`)* | Home hero loop — portrait 9:16, ~15 s, silent. Encoded 720×1280, CRF 26 mp4 / CRF 33 VP9. |
+| `/public/craft-grind.mp4` *(+ `.webm`, `-poster.jpg`)* | "Ground to order" section loop + polaroid on the About page. Same encode spec. |
+| `/public/drinks/*.jpg` | Drink photos. Uploads from `/admin/drinks/new` also end up here (via Supabase Storage). |
 
-If `hero-pull.mp4` is missing, the landing page falls back to the poster
-image silently — no error.
+If any video is missing, the `<video>` falls back to the poster image
+silently — no empty box.
+
+To re-encode from a source reel (portrait MP4):
+
+```bash
+ffmpeg -i source.mp4 -an -vf "scale=720:1280:flags=lanczos" \
+  -c:v libx264 -preset slow -crf 26 -pix_fmt yuv420p -movflags +faststart \
+  public/hero-pull.mp4
+
+ffmpeg -i source.mp4 -an -vf "scale=720:1280:flags=lanczos" \
+  -c:v libvpx-vp9 -b:v 0 -crf 33 -row-mt 1 -pix_fmt yuv420p \
+  public/hero-pull.webm
+
+ffmpeg -ss 1.5 -i source.mp4 -frames:v 1 \
+  -vf "scale=720:1280:flags=lanczos" -q:v 3 public/hero-pull-poster.jpg
+```
 
 ---
 

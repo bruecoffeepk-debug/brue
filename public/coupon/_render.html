@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>BRUE render</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600&family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600&display=swap"
+  rel="stylesheet"
+/>
+<style>
+:root {
+  --terra: #c44526; --terra-deep: #9a3419;
+  --bone: #fcf7eb; --cream: #f3e8d2;
+  --ink: #1c1712; --ink-soft: #3e352b; --ink-muted: #7a6c5d;
+  --sage: #6b7a53; --mustard: #d4972e;
+  --card-w: 85.6mm; --card-h: 53.98mm;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body {
+  background: #ffffff;
+  font-family: 'Inter Tight', system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+body { display: flex; flex-direction: column; align-items: flex-start; }
+
+.card {
+  width: var(--card-w);
+  height: var(--card-h);
+  position: relative;
+  overflow: hidden;
+  color: var(--ink);
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.card::after {
+  content: '';
+  position: absolute; inset: 0;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='4'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.35 0'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.35'/></svg>");
+  mix-blend-mode: multiply;
+  opacity: 0.16;
+  pointer-events: none;
+}
+
+/* ───────────────────── FRONT ───────────────────── */
+.front {
+  background: radial-gradient(130% 100% at 100% 0%, #d8562f 0%, var(--terra) 48%, #9f3318 100%);
+  color: var(--bone);
+  padding: 4.4mm 5.4mm 4.4mm 5.4mm;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  row-gap: 1.2mm;
+}
+
+.front .top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 5.4pt;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: rgba(252, 247, 235, 0.78);
+}
+.front .top .est {
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.front .top .est .bar {
+  width: 10px; height: 1px;
+  background: rgba(252,247,235,0.55);
+  display: inline-block;
+}
+.front .top .nr {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: rgba(252,247,235,0.9);
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 7pt;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+/* Hero body */
+.front .hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  padding-left: 0.5mm;
+}
+.front .hero .row {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3mm;
+  line-height: 0.8;
+}
+.front .hero .num {
+  font-family: 'Instrument Serif', serif; font-weight: 400;
+  font-size: 72pt; line-height: 0.78; letter-spacing: -0.045em;
+  color: var(--bone);
+}
+.front .hero .num .percent {
+  font-size: 36pt; vertical-align: 0.62em;
+  margin-left: 1px; font-style: italic;
+  display: inline-block; transform: translateY(-6px);
+}
+.front .hero .off {
+  font-family: 'Instrument Serif', serif; font-style: italic;
+  font-size: 30pt; line-height: 0.95;
+  color: var(--bone);
+  padding-bottom: 1mm;
+  position: relative;
+}
+.front .hero .off::after {
+  content: '';
+  position: absolute;
+  left: -1px; right: -3px; bottom: 0.2mm;
+  height: 1.2px;
+  background: rgba(252,247,235,0.5);
+  transform: rotate(-1.4deg);
+}
+.front .hero .script {
+  font-family: 'Caveat', cursive;
+  font-size: 14pt;
+  color: rgba(252,247,235,0.95);
+  transform: rotate(-2.8deg);
+  margin-top: 1.6mm;
+  margin-left: 1.2mm;
+  line-height: 1;
+  display: inline-block;
+}
+
+/* Footer */
+.front .foot {
+  border-top: 1px dashed rgba(252,247,235,0.4);
+  padding-top: 1.6mm;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 2mm;
+}
+.front .foot .url {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 8pt;
+  letter-spacing: 0;
+  color: var(--bone);
+  text-transform: none;
+  white-space: nowrap;
+}
+.front .foot .methods {
+  justify-self: center;
+  font-size: 5pt;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: rgba(252,247,235,0.7);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.front .foot .methods .dot {
+  width: 2.6px; height: 2.6px; border-radius: 999px;
+  background: rgba(252,247,235,0.55);
+}
+.front .foot .est2 {
+  font-size: 5pt;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: rgba(252,247,235,0.72);
+  white-space: nowrap;
+}
+
+/* Big watermark flower on front — bottom-left, far from text */
+.front .flower-bg {
+  position: absolute;
+  left: -4mm;
+  bottom: -4mm;
+  width: 22mm;
+  height: 22mm;
+  opacity: 0.1;
+  transform: rotate(-18deg);
+  pointer-events: none;
+}
+
+/* ───────────────────── BACK ───────────────────── */
+.back {
+  background: linear-gradient(180deg, #fbf3df 0%, var(--bone) 55%, #f1e6cf 100%);
+  color: var(--ink);
+  padding: 4mm 4.6mm;
+  display: grid;
+  grid-template-columns: 26mm 1fr;
+  gap: 3.6mm;
+  align-items: stretch;
+}
+.back .qrCol {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-right: 1px dashed rgba(28,23,18,0.2);
+  padding-right: 2.8mm;
+  position: relative;
+}
+.back .qrCol::before, .back .qrCol::after {
+  content: '';
+  position: absolute;
+  right: -1.6mm;
+  width: 2.8mm; height: 2.8mm;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 0.2mm rgba(28,23,18,0.12);
+}
+.back .qrCol::before { top: -1.6mm; }
+.back .qrCol::after  { bottom: -1.6mm; }
+.back .qrBox {
+  background: var(--bone);
+  padding: 1.4mm;
+  border-radius: 1.8mm;
+  border: 0.4mm solid rgba(28,23,18,0.14);
+  width: 22mm; height: 22mm;
+  display: flex; align-items: center; justify-content: center;
+}
+.back .qrBox img {
+  width: 100%; height: 100%;
+  display: block;
+  image-rendering: pixelated;
+}
+.back .qrLabel {
+  margin-top: 1.6mm;
+  font-size: 5.4pt;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+.back .qrLabel strong {
+  display: block;
+  color: var(--ink);
+  font-family: 'Fraunces', serif;
+  font-weight: 500;
+  font-style: italic;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-size: 8pt;
+  margin-top: 0.6mm;
+}
+.back .qrFoot {
+  font-family: 'Caveat', cursive;
+  font-size: 10.5pt;
+  color: var(--terra);
+  transform: rotate(-4deg);
+  line-height: 1;
+  opacity: 0.9;
+  margin-top: 1mm;
+}
+
+/* Right column */
+.back .info {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0;
+  min-width: 0;
+}
+.back .brand {
+  display: flex;
+  align-items: baseline;
+  gap: 2mm;
+  flex-wrap: nowrap;
+}
+.back .wordmark {
+  font-family: 'Instrument Serif', serif;
+  font-size: 20pt;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--terra);
+}
+.back .brand .sub {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 8.4pt;
+  color: var(--ink-muted);
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.back h2 {
+  font-family: 'Instrument Serif', serif;
+  font-size: 11.8pt;
+  line-height: 1.12;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin-top: 1.2mm;
+  max-width: 46mm;
+}
+.back h2 em { font-style: italic; color: var(--terra); }
+.back .lines {
+  margin-top: 1.2mm;
+  font-size: 6.6pt;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+.back .lines .step {
+  display: flex;
+  gap: 1.4mm;
+  align-items: flex-start;
+}
+.back .lines .step + .step { margin-top: 0.6mm; }
+.back .lines .step .n {
+  font-family: 'Fraunces', serif;
+  font-style: italic;
+  font-size: 7pt;
+  color: var(--terra);
+  min-width: 3.5mm;
+  line-height: 1.3;
+}
+.back .lines strong { font-weight: 500; color: var(--ink); }
+.back .foot {
+  margin-top: 1.4mm;
+  border-top: 1px solid rgba(28,23,18,0.14);
+  padding-top: 1.2mm;
+}
+.back .foot .web {
+  display: flex; align-items: center; gap: 1.6mm;
+  font-family: 'Fraunces', serif;
+  font-size: 8.2pt;
+  font-weight: 500;
+  color: var(--ink);
+}
+.back .foot .web .pill {
+  font-family: 'Inter Tight', sans-serif;
+  font-weight: 600;
+  font-size: 5.4pt;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--bone);
+  background: var(--ink);
+  padding: 0.6mm 1.6mm;
+  border-radius: 999px;
+}
+.back .foot .terms {
+  margin-top: 0.9mm;
+  font-size: 4.8pt;
+  letter-spacing: 0.08em;
+  line-height: 1.45;
+  color: var(--ink-muted);
+  text-transform: uppercase;
+}
+
+/* Small sage dot + "on us" whisper in the hero */
+.back .whisper {
+  position: absolute;
+  right: 4mm;
+  top: 4mm;
+  font-family: 'Caveat', cursive;
+  font-size: 11pt;
+  color: var(--terra);
+  transform: rotate(-6deg);
+  opacity: 0.78;
+  line-height: 1;
+  text-align: right;
+}
+.back .whisper .big {
+  display: block;
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: 18pt;
+  line-height: 0.9;
+  color: var(--terra);
+  letter-spacing: -0.02em;
+}
+
+/* Tiny corner flower back */
+.back .flower-bg {
+  position: absolute;
+  right: -5mm;
+  bottom: -5mm;
+  width: 22mm;
+  height: 22mm;
+  opacity: 0.08;
+  transform: rotate(22deg);
+  pointer-events: none;
+}
+
+/* layout modes via URL hash */
+body.render-front .back,
+body.render-back  .front { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ══════ FRONT ══════ -->
+<article class="card front">
+  <!-- faint watermark flower, bottom-left -->
+  <svg class="flower-bg" viewBox="0 0 40 40" aria-hidden="true">
+    <g fill="#fcf7eb">
+      <ellipse cx="20" cy="9"  rx="5"  ry="8"/>
+      <ellipse cx="20" cy="31" rx="5"  ry="8" transform="rotate(180 20 20)"/>
+      <ellipse cx="9"  cy="20" rx="8"  ry="5"/>
+      <ellipse cx="31" cy="20" rx="8"  ry="5"/>
+      <ellipse cx="12" cy="12" rx="6" ry="3.5" transform="rotate(-45 12 12)"/>
+      <ellipse cx="28" cy="28" rx="6" ry="3.5" transform="rotate(-45 28 28)"/>
+      <circle cx="20" cy="20" r="3" fill="#c44526"/>
+    </g>
+  </svg>
+
+  <div class="top">
+    <span class="est">
+      <span class="bar"></span>
+      Brue · Karachi · Est. 2025
+    </span>
+    <span class="nr">nº 015 ✿</span>
+  </div>
+
+  <div class="hero">
+    <div class="row">
+      <span class="num">15<span class="percent">%</span></span>
+      <span class="off">off</span>
+    </div>
+    <span class="script">on your next brue ✿</span>
+  </div>
+
+  <div class="foot">
+    <span class="url">bruecoffeepk.com</span>
+    <span class="methods">
+      <span>order</span><span class="dot"></span>
+      <span>walk-in</span><span class="dot"></span>
+      <span>whatsapp</span>
+    </span>
+    <span class="est2">karachi · pk</span>
+  </div>
+</article>
+
+
+<!-- ══════ BACK ══════ -->
+<article class="card back">
+  <!-- watermark flower, bottom-right -->
+  <svg class="flower-bg" viewBox="0 0 40 40" aria-hidden="true">
+    <g fill="#c44526">
+      <ellipse cx="20" cy="9"  rx="5"  ry="8"/>
+      <ellipse cx="20" cy="31" rx="5"  ry="8" transform="rotate(180 20 20)"/>
+      <ellipse cx="9"  cy="20" rx="8"  ry="5"/>
+      <ellipse cx="31" cy="20" rx="8"  ry="5"/>
+      <circle cx="20" cy="20" r="3" fill="#fcf7eb"/>
+    </g>
+  </svg>
+
+  <div class="qrCol">
+    <div>
+      <div class="qrBox">
+        <img
+          src="https://api.qrserver.com/v1/create-qr-code/?size=360x360&margin=0&data=https%3A%2F%2Finstagram.com%2Fbruecoffeepk&color=1c1712&bgcolor=fcf7eb"
+          alt="Scan for BRUE on Instagram"
+        />
+      </div>
+      <div class="qrLabel">
+        scan · instagram
+        <strong>@bruecoffeepk</strong>
+      </div>
+    </div>
+    <div class="qrFoot">say hi ✿</div>
+  </div>
+
+  <div class="info">
+    <div>
+      <div class="brand">
+        <span class="wordmark">BRUE</span>
+        <span class="sub">· coffee, karachi</span>
+      </div>
+
+      <h2>A cold one <em>on us</em> — 15% off your next order.</h2>
+
+      <div class="lines">
+        <div class="step">
+          <span class="n">01</span>
+          <span>
+            Order on <strong>bruecoffeepk.com/menu</strong> — apply code
+            <strong>BRUE15</strong> at checkout.
+          </span>
+        </div>
+        <div class="step">
+          <span class="n">02</span>
+          <span>Or swing by the bar and hand us this card — rider drop-offs count too.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="foot">
+      <div class="web">
+        <span class="pill">web</span>
+        bruecoffeepk.com
+      </div>
+      <div class="terms">
+        one-time use · coffee only · not combinable · exp. 31 dec 2026
+      </div>
+    </div>
+  </div>
+</article>
+
+<script>
+  const which = (location.hash || '').replace('#','');
+  if (which === 'front' || which === 'back') {
+    document.body.className = 'render-' + which;
+  }
+</script>
+</body>
+</html>

@@ -214,63 +214,81 @@ insert into categories (name, slug, emoji, sort_order) values
   ('Non-Coffee',  'non-coffee',  '🥛', 50),
   ('Iced Tea',    'iced-tea',    '🍵', 60),
   ('Lemonade',    'lemonade',    '🍋', 65),
-  ('Sweets',      'sweets',      '🍰', 70),
-  ('New Recipe',  'new-recipe',  '✨', 80);
+  ('New Recipe',  'new-recipe',  '✨', 80),
+  ('Dessert',     'dessert',     '🍰', 90);
 
 -- ┌─────────────────────────────────────────────────────────┐
--- │ 6. SEED: 50 drinks                                      │
+-- │ 6. SEED: 49 drinks                                      │
 -- └─────────────────────────────────────────────────────────┘
+-- Reuse map: hot/iced lattes that don't have their own photo borrow
+-- a visually similar one from the existing 18-photo set. Photos for
+-- distinctly-named drinks (strawberry / shake / dessert) are pending —
+-- see /public/drinks-generated/_render.html for the illustrated poster
+-- pipeline.
 
 insert into menu_items (name, category, description, price, cost, photo, sort_order) values
-  ('Americano',            'Coffee',     'Double shot espresso with hot water',                 550, 220, '/drinks/americano.jpg',          1),
-  ('Cappuccino',           'Coffee',     'Espresso with steamed milk foam',                     600, 240, '/drinks/cappuccino.jpg',         2),
-  ('Mocha Cappuccino',     'Coffee',     'Espresso, chocolate, steamed milk',                   650, 260, '/drinks/mocha-cappuccino.jpg',   3),
-  ('Flat White',           'Coffee',     'Double ristretto with velvety micro-foam',            625, 250, null,                             4),
-  ('Long Black',           'Coffee',     'Hot water with double espresso',                      550, 220, null,                             5),
-  ('Spanish Latte',        'Iced Latte', 'Condensed milk, espresso, cold cream over ice',       625, 250, '/drinks/spanish-latte.jpg',     10),
-  ('French Vanilla',       'Iced Latte', 'Vanilla syrup, espresso, cold milk',                  625, 250, '/drinks/french-vanilla.jpg',    11),
-  ('Caramella',            'Iced Latte', 'Caramel syrup, espresso, cold milk',                  650, 260, '/drinks/caramella.jpg',         12),
-  ('Creme Brulee',         'Iced Latte', 'Custard-sweet espresso over ice',                     645, 258, '/drinks/creme-brulee.jpg',      13),
-  ('Roasted Hazelnut',     'Iced Latte', 'Hazelnut syrup, espresso, cold milk',                 645, 258, '/drinks/roasted-hazelnut.jpg',  14),
-  ('Tiramisu Espresso',    'Iced Latte', 'Tiramisu syrup, espresso, cream milk',                660, 264, '/drinks/tiramisu-espresso.jpg', 15),
-  ('Strawberry Mocha',     'Iced Latte', 'Strawberry, mocha, espresso, ice',                    660, 264, null,                            16),
-  ('Salted Caramel Latte', 'Iced Latte', 'Salted caramel, espresso, cold milk',                 650, 260, null,                            17),
-  ('Coconut Latte',        'Iced Latte', 'Coconut syrup, espresso, cold milk',                  670, 268, null,                            18),
-  ('Brown Sugar Latte',    'Iced Latte', 'Brown sugar syrup, espresso, cinnamon milk',          650, 260, null,                            19),
-  ('Spanish Latte (Hot)',  'Hot Latte',  'Condensed milk with espresso',                        600, 240, null,                            20),
-  ('French Vanilla (Hot)', 'Hot Latte',  'Vanilla syrup, espresso, steamed milk',               600, 240, null,                            21),
-  ('Hazelnut Latte (Hot)', 'Hot Latte',  'Hazelnut, espresso, steamed milk',                    620, 248, null,                            22),
-  ('Caramel Latte (Hot)',  'Hot Latte',  'Caramel, espresso, steamed milk',                     610, 244, null,                            23),
-  ('Creme Brulee (Hot)',   'Hot Latte',  'Custard sweet espresso, steamed milk',                625, 250, null,                            24),
-  ('Mocha Frappe',         'Frappé',     'Blended mocha espresso with whipped cream',           820, 328, '/drinks/mocha-frappe.jpg',      30),
-  ('Caramel Frappe',       'Frappé',     'Blended caramel espresso with whipped cream',         820, 328, '/drinks/caramel-frappe.jpg',    31),
-  ('Vanilla-Bean Frappe',  'Frappé',     'Vanilla bean blended with cold milk',                 800, 320, '/drinks/vanilla-bean-frappe.jpg',32),
-  ('Hazelnut Frappe',      'Frappé',     'Hazelnut blended espresso frappe',                    830, 332, null,                            33),
-  ('Strawberry Frappe',    'Frappé',     'Strawberry blended with cream',                       800, 320, null,                            34),
-  ('Oreo Frappe',          'Frappé',     'Oreo cookie blended with cream',                      850, 340, null,                            35),
-  ('Lotus Frappe',         'Frappé',     'Lotus Biscoff blended with espresso cream',           870, 348, null,                            36),
-  ('Iced Chocolate',       'Non-Coffee', 'Premium chocolate over cold milk and ice',            620, 248, '/drinks/iced-chocolate.jpg',    40),
-  ('Hot Chocolate',        'Non-Coffee', 'Rich premium chocolate steamed milk',                 620, 248, '/drinks/hot-chocolate.jpg',     41),
-  ('Berry Lemonade',       'Non-Coffee', 'Mixed berry and fresh lemon over ice',                550, 220, '/drinks/berry-lemonade.jpg',    42),
-  ('Mint Lemonade',        'Non-Coffee', 'Fresh mint and lemon with ice',                       540, 216, '/drinks/mint-lemonade.jpg',     43),
-  ('Virgin Mojito',        'Non-Coffee', 'Mint, lime, soda, crushed ice',                       560, 224, null,                            44),
-  ('Mango Lassi',          'Non-Coffee', 'Mango, yogurt, cold milk',                            600, 240, null,                            45),
-  ('Oreo Milkshake',       'Non-Coffee', 'Oreo cookie milkshake',                               750, 300, null,                            46),
-  ('Peach Iced Tea',       'Iced Tea',   'Monin peach, black tea, cream cold foam',             580, 232, '/drinks/peach-iced-tea.jpg',    50),
-  ('Raspberry Iced Tea',   'Iced Tea',   'Monin raspberry, black tea, ice',                     570, 228, '/drinks/raspberry-iced-tea.jpg',51),
-  ('Lychee Iced Tea',      'Iced Tea',   'Lychee syrup, green tea, ice',                        575, 230, null,                            52),
-  ('Passion Fruit Tea',    'Iced Tea',   'Passion fruit, green tea, cream foam',                585, 234, null,                            53),
-  ('Mango Green Tea',      'Iced Tea',   'Mango, green tea, ice',                               575, 230, null,                            54),
-  ('Tiramisu Frappe',      'New Recipe', 'Tiramisu espresso frappe with mascarpone',            890, 356, null,                            60),
-  ('Lotus Latte',          'New Recipe', 'Lotus Biscoff, espresso, cold milk',                  720, 288, null,                            61),
-  ('Charcoal Latte',       'New Recipe', 'Activated charcoal, espresso, almond milk',           710, 284, null,                            62),
-  ('Rose Latte',           'New Recipe', 'Rose syrup, espresso, cold milk, rose petals',        700, 280, null,                            63),
-  ('Matchaccino',          'New Recipe', 'Matcha, espresso, steamed milk',                      720, 288, null,                            64),
-  ('Dalgona Coffee',       'New Recipe', 'Whipped coffee foam over cold milk',                  660, 264, null,                            65),
-  ('S''mores Latte',       'New Recipe', 'Graham, chocolate, marshmallow, espresso',            760, 304, null,                            66),
-  ('Banana Foster Latte',  'New Recipe', 'Caramelised banana, espresso, cold milk',             720, 288, null,                            67),
-  ('Cold Brew',            'New Recipe', '12-hour cold steeped coffee over ice',                600, 240, null,                            68),
-  ('Nitro Cold Brew',      'New Recipe', 'Nitrogen-infused cold brew on tap',                   700, 280, null,                            69);
+  -- Coffee
+  ('Americano',            'Coffee',     'Double shot espresso with hot water',                 550, 220, '/drinks/americano.jpg',           1),
+  ('Cappuccino',           'Coffee',     'Espresso with steamed milk foam',                     600, 240, '/drinks/cappuccino.jpg',          2),
+  ('Mocha Cappuccino',     'Coffee',     'Espresso, chocolate, steamed milk',                   650, 260, '/drinks/mocha-cappuccino.jpg',    3),
+  ('Iced Americano',       'Coffee',     'Double espresso over cold water and ice',             580, 232, '/drinks/iced-americano.jpg',      6),
+
+  -- Iced Latte
+  ('Spanish Latte',        'Iced Latte', 'Condensed milk, espresso, cold cream over ice',       625, 250, '/drinks/spanish-latte.jpg',      10),
+  ('French Vanilla',       'Iced Latte', 'Vanilla syrup, espresso, cold milk',                  625, 250, '/drinks/french-vanilla.jpg',     11),
+  ('Caramella',            'Iced Latte', 'Caramel syrup, espresso, cold milk',                  650, 260, '/drinks/caramella.jpg',          12),
+  ('Creme Brulee',         'Iced Latte', 'Custard-sweet espresso over ice',                     645, 258, '/drinks/creme-brulee.jpg',       13),
+  ('Roasted Hazelnut',     'Iced Latte', 'Hazelnut syrup, espresso, cold milk',                 645, 258, '/drinks/roasted-hazelnut.jpg',   14),
+  ('Tiramisu Espresso',    'Iced Latte', 'Tiramisu syrup, espresso, cream milk',                660, 264, '/drinks/tiramisu-espresso.jpg',  15),
+  ('Strawberry Mocha',     'Iced Latte', 'Strawberry, mocha, espresso, ice',                    660, 264, '/drinks/strawberry-mocha.jpg',   16),
+  ('Salted Caramel Latte', 'Iced Latte', 'Salted caramel, espresso, cold milk',                 650, 260, '/drinks/salted-caramel-latte.jpg', 17),
+  ('Brown Sugar Latte',    'Iced Latte', 'Brown sugar syrup, espresso, cinnamon milk',          650, 260, '/drinks/brown-sugar-latte.jpg',  18),
+  ('Affogato Latte',       'Iced Latte', 'Espresso poured over vanilla ice cream',              720, 288, '/drinks/creme-brulee.jpg',       19),
+  ('Mocha Latte',          'Iced Latte', 'Iced mocha, espresso, cold milk',                     660, 264, '/drinks/mocha-latte.jpg',        20),
+
+  -- Hot Latte
+  ('Cafe Latte',           'Hot Latte',  'Espresso with steamed milk',                          580, 232, '/drinks/cafe-latte.jpg',         25),
+  ('Salted Caramel',       'Hot Latte',  'Salted caramel, espresso, steamed milk',              610, 244, '/drinks/mocha-cappuccino.jpg',   26),
+  ('Tiramisu',             'Hot Latte',  'Tiramisu syrup, espresso, steamed milk',              625, 250, '/drinks/mocha-cappuccino.jpg',   27),
+  ('Mocha Latte',          'Hot Latte',  'Chocolate, espresso, steamed milk',                   620, 248, '/drinks/mocha-cappuccino.jpg',   28),
+  ('Spanish Latte (Hot)',  'Hot Latte',  'Condensed milk with espresso',                        600, 240, '/drinks/spanish-latte-hot.jpg',  29),
+  ('French Vanilla (Hot)', 'Hot Latte',  'Vanilla syrup, espresso, steamed milk',               600, 240, '/drinks/french-vanilla-hot.jpg', 30),
+  ('Hazelnut Latte (Hot)', 'Hot Latte',  'Hazelnut, espresso, steamed milk',                    620, 248, '/drinks/hazelnut-latte-hot.jpg', 31),
+  ('Caramel Latte (Hot)',  'Hot Latte',  'Caramel, espresso, steamed milk',                     610, 244, '/drinks/caramel-latte-hot.jpg',  32),
+  ('Creme Brulee (Hot)',   'Hot Latte',  'Custard sweet espresso, steamed milk',                625, 250, '/drinks/creme-brulee-hot.jpg',   33),
+
+  -- Frappé
+  ('Mocha Frappe',         'Frappé',     'Blended mocha espresso with whipped cream',           820, 328, '/drinks/mocha-frappe.jpg',       40),
+  ('Caramel Frappe',       'Frappé',     'Blended caramel espresso with whipped cream',         820, 328, '/drinks/caramel-frappe.jpg',     41),
+  ('Vanilla-Bean Frappe',  'Frappé',     'Vanilla bean blended with cold milk',                 800, 320, '/drinks/vanilla-bean-frappe.jpg',42),
+  ('Hazelnut Frappe',      'Frappé',     'Hazelnut blended espresso frappe',                    830, 332, '/drinks/hazelnut-frappe.jpg',    43),
+  ('Strawberry Frappe',    'Frappé',     'Strawberry blended with cream',                       800, 320, '/drinks/strawberry-frappe.jpg',  44),
+  ('Oreo Frappe',          'Frappé',     'Oreo cookie blended with cream',                      850, 340, '/drinks/oreo-frappe.jpg',        45),
+  ('Strawberry Mocha',     'Frappé',     'Strawberry mocha blended with whipped cream',         850, 340, '/drinks/strawberry-frappe.jpg',  46),
+
+  -- Non-Coffee
+  ('Iced Chocolate',       'Non-Coffee', 'Premium chocolate over cold milk and ice',            620, 248, '/drinks/iced-chocolate.jpg',     50),
+  ('Hot Chocolate',        'Non-Coffee', 'Rich premium chocolate steamed milk',                 620, 248, '/drinks/hot-chocolate.jpg',      51),
+  ('Berry Lemonade',       'Non-Coffee', 'Mixed berry and fresh lemon over ice',                550, 220, '/drinks/berry-lemonade.jpg',     52),
+  ('Mint Lemonade',        'Non-Coffee', 'Fresh mint and lemon with ice',                       540, 216, '/drinks/mint-lemonade.jpg',      53),
+  ('Strawberry Shake',     'Non-Coffee', 'Strawberry blended with vanilla ice cream',           700, 280, '/drinks/strawberry-shake.jpg',   55),
+  ('Chocolate Shake',      'Non-Coffee', 'Chocolate blended with vanilla ice cream',            700, 280, '/drinks/chocolate-shake.jpg',    56),
+
+  -- Iced Tea
+  ('Peach Iced Tea',       'Iced Tea',   'Monin peach, black tea, cream cold foam',             580, 232, '/drinks/peach-iced-tea.jpg',     60),
+  ('Raspberry Iced Tea',   'Iced Tea',   'Monin raspberry, black tea, ice',                     570, 228, '/drinks/raspberry-iced-tea.jpg', 61),
+
+  -- New Recipe
+  ('Espresso Tonic',       'New Recipe', 'Espresso tonic bomb over ice',                        720, 288, '/drinks/espresso-tonic.jpg',     70),
+  ('Mont de Creme',        'New Recipe', 'Layered cream + espresso over ice',                   720, 288, '/drinks/mont-de-creme.jpg',      71),
+  ('Salted Mocha',         'New Recipe', 'Salted chocolate, espresso, cold milk',               700, 280, '/drinks/mocha-cappuccino.jpg',   72),
+  ('Ice Sweetful',         'New Recipe', 'House sweet iced specialty',                          680, 272, null,                             73),
+  ('Strawberry Mocha',     'New Recipe', 'Strawberry mocha specialty over ice',                 720, 288, '/drinks/strawberry-mocha.jpg',   74),
+
+  -- Dessert
+  ('Tiramisu Affogato',    'Dessert',    'Tiramisu with hot espresso poured over',              650, 260, null,                             80),
+  ('Tiramisu in a Cup',    'Dessert',    'Classic tiramisu served in a cup',                    550, 220, null,                             81),
+  ('Brownie',              'Dessert',    'Warm chocolate brownie',                              450, 180, null,                             82);
 
 -- ┌─────────────────────────────────────────────────────────┐
 -- │ 7. BACKFILL category_id on menu_items                   │

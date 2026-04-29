@@ -22,6 +22,7 @@ import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { checkOrderRateLimit } from '@/lib/ratelimit';
 import { getClientIp } from '@/lib/clientIp';
+import { verifyTurnstileToken } from '@/lib/turnstile';
 import {
   SHOP,
   findDeliveryArea,
@@ -51,6 +52,7 @@ type IncomingPayload = {
   };
   notes?: string | null;
   items: IncomingItem[];
+  cf_token?: string | null;   // Cloudflare Turnstile token from the client
 };
 
 function bad(msg: string, status = 400) {
@@ -110,6 +112,14 @@ export async function POST(req: Request) {
     body = (await req.json()) as IncomingPayload;
   } catch {
     return bad('Invalid JSON');
+  }
+
+  // ── CAPTCHA (Cloudflare Turnstile) ──
+  // Fail-open if Turnstile isn't configured server-side (no secret key);
+  // when configured, a missing or invalid token rejects the order.
+  const captcha = await verifyTurnstileToken(body?.cf_token, ip);
+  if (!captcha.ok) {
+    return bad('Bot check failed — refresh the page and try again.', 403);
   }
 
   // ── basic shape validation ──

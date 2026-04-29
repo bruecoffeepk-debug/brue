@@ -7,6 +7,7 @@ import { pkr } from '@/lib/utils';
 import type { Category, DrinkWithCategory } from '@/lib/utils';
 import { SHOP, deliverySummary } from '@/lib/shop';
 import { useZone } from '@/lib/zone-context';
+import { Turnstile } from './Turnstile';
 
 type CartLine = { id: string; name: string; price: number; cost: number; qty: number; photo: string | null };
 type Step = 'cart' | 'details' | 'placed';
@@ -332,6 +333,7 @@ function CheckoutDrawer({
 
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
+  const [cfToken, setCfToken] = useState<string | null>(null);
   const [placed, setPlaced] = useState<{
     id: string;
     order_number: number;
@@ -364,8 +366,12 @@ function CheckoutDrawer({
               ? { method, area_id: zone.area.id, street }
               : undefined,
           notes,
+          // Cloudflare Turnstile token. Server-side fail-open if Turnstile
+          // isn't configured (no NEXT_PUBLIC_TURNSTILE_SITE_KEY → no widget,
+          // no token, server skips verification).
+          cf_token: cfToken,
           items: cart.map((l) => ({
-            id: l.id, name: l.name, price: l.price, cost: l.cost, quantity: l.qty,
+            id: l.id, name: l.name, price: l.price, quantity: l.qty,
           })),
         }),
       });
@@ -695,6 +701,11 @@ function CheckoutDrawer({
                   {pkr(subtotal)}
                 </span>
               </div>
+
+              {/* Invisible Turnstile widget — only renders if NEXT_PUBLIC_TURNSTILE_SITE_KEY is set.
+                  Cloudflare runs the challenge silently; user only sees a checkbox when scored as bot. */}
+              <Turnstile onToken={setCfToken} />
+
               <div className="flex gap-2">
                 <button
                   onClick={() => setStep('cart')}

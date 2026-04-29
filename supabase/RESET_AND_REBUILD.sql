@@ -191,7 +191,14 @@ create policy "expenses_staff_all" on expenses
 -- the browser bundle. Server-side reads (admin/POS, authenticated
 -- session) keep using the menu_items table directly.
 
-create or replace view menu_items_public as
+-- security_invoker = false → view runs as its owner (full menu_items
+-- access), bypassing the anon RLS that hides the underlying table.
+-- The view still filters to active = true and never exposes `cost`,
+-- so anon gets a safe public projection only.
+drop view if exists menu_items_public;
+create view menu_items_public
+with (security_invoker = false)
+as
 select
   id, name, category, category_id, description, price, photo,
   active, in_stock, sort_order, created_at, updated_at

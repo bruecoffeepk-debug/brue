@@ -1,9 +1,9 @@
 'use client';
 
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
-import { Search, Plus, Minus, X, ShoppingBag, MapPin, Loader2, Check, Lock } from 'lucide-react';
-import { pkr } from '@/lib/utils';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, Plus, Minus, X, ShoppingBag, MapPin, Loader2, Check, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { pkr, drinkPhotos } from '@/lib/utils';
 import type { Category, DrinkWithCategory } from '@/lib/utils';
 import { SHOP, deliverySummary } from '@/lib/shop';
 import { useZone } from '@/lib/zone-context';
@@ -23,6 +23,7 @@ export default function MenuClient({
   const [query, setQuery] = useState('');
   const [cart, setCart] = useState<CartLine[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [openDrink, setOpenDrink] = useState<DrinkWithCategory | null>(null);
   const zone = useZone();
   const canOrder = zone.canOrder;
 
@@ -60,20 +61,21 @@ export default function MenuClient({
   const subtotal = cart.reduce((s, l) => s + l.price * l.qty, 0);
   const cartCount = cart.reduce((s, l) => s + l.qty, 0);
 
-  function addToCart(d: DrinkWithCategory) {
+  function addToCart(d: DrinkWithCategory, addQty = 1) {
     if (!d.in_stock) return;
     if (!canOrder) {
       zone.openGate();
       return;
     }
+    const qty = Math.max(1, Math.min(99, Math.round(addQty)));
     setCart((c) => {
       const exists = c.find((l) => l.id === d.id);
-      if (exists) return c.map((l) => (l.id === d.id ? { ...l, qty: l.qty + 1 } : l));
+      if (exists) return c.map((l) => (l.id === d.id ? { ...l, qty: l.qty + qty } : l));
       // Note: cost is NOT carried client-side. The /api/orders route looks
       // up the canonical cost from menu_items.id server-side. See migration 006.
       return [
         ...c,
-        { id: d.id, name: d.name, price: d.price, cost: 0, qty: 1, photo: d.photo },
+        { id: d.id, name: d.name, price: d.price, cost: 0, qty, photo: d.photo },
       ];
     });
   }
@@ -247,7 +249,7 @@ export default function MenuClient({
                   <DrinkCard
                     key={d.id}
                     drink={d}
-                    onAdd={() => addToCart(d)}
+                    onOpen={() => setOpenDrink(d)}
                     canOrder={canOrder}
                   />
                 ))}
@@ -300,6 +302,22 @@ export default function MenuClient({
           subtotal={subtotal}
           onClose={() => setCartOpen(false)}
           onChangeQty={changeQty}
+        />
+      )}
+
+      {openDrink && (
+        <DrinkDetailModal
+          drink={openDrink}
+          canOrder={canOrder}
+          onClose={() => setOpenDrink(null)}
+          onAdd={(qty) => {
+            addToCart(openDrink, qty);
+            setOpenDrink(null);
+          }}
+          onPickArea={() => {
+            setOpenDrink(null);
+            zone.openGate();
+          }}
         />
       )}
     </>
@@ -854,13 +872,23 @@ function Stat({ num, label, italic }: {
   );
 }
 
-function DrinkCard({ drink, onAdd, canOrder }: {
-  drink: DrinkWithCategory; onAdd: () => void; canOrder: boolean;
+function DrinkCard({ drink, onOpen, canOrder }: {
+  drink: DrinkWithCategory; onOpen: () => void; canOrder: boolean;
 }) {
   const sold = !drink.in_stock;
   const photo = drink.photo || '/Brue_DP_Orange.png';
+  // Did the user upload alt shots for this drink? If yes, hint that with a chip.
+  const photoCount = useMemo(() => drinkPhotos(drink.name, drink.photo).length, [drink.name, drink.photo]);
+
   return (
-    <div id={drink.id} className="group" style={{ opacity: sold ? 0.6 : 1 }}>
+    <button
+      type="button"
+      onClick={onOpen}
+      id={drink.id}
+      className="group text-left w-full"
+      style={{ opacity: sold ? 0.6 : 1, cursor: 'pointer' }}
+      aria-label={`View ${drink.name}`}
+    >
       <div
         className="relative overflow-hidden grain"
         style={{
@@ -887,6 +915,38 @@ function DrinkCard({ drink, onAdd, canOrder }: {
             Sold out
           </span>
         )}
+        {photoCount > 1 && !sold && (
+          <span
+            className="absolute top-3 right-3 z-[2] inline-flex items-center gap-1"
+            style={{
+              fontSize: 10, letterSpacing: '0.12em',
+              background: 'rgba(252,247,235,0.92)', color: 'var(--ink)',
+              padding: '4px 8px', borderRadius: 999, fontWeight: 600,
+              backdropFilter: 'blur(6px)',
+            }}
+          >
+            <span style={{ width: 5, height: 5, borderRadius: 999, background: 'var(--terra)' }} />
+            {photoCount} pics
+          </span>
+        )}
+        {/* Hover veil hinting "click for details" */}
+        <div
+          className="absolute inset-0 flex items-end justify-end p-3 opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{
+            background: 'linear-gradient(to top, rgba(28,23,18,0.45), transparent 50%)',
+            pointerEvents: 'none',
+          }}
+        >
+          <span
+            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full"
+            style={{
+              background: 'var(--bone)', color: 'var(--ink)',
+              fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase', fontWeight: 600,
+            }}
+          >
+            View
+          </span>
+        </div>
       </div>
 
       <div className="flex items-baseline justify-between mt-4 gap-3">
@@ -912,29 +972,26 @@ function DrinkCard({ drink, onAdd, canOrder }: {
         </p>
       )}
 
-      <button
-        disabled={sold}
-        onClick={onAdd}
+      <span
         className="mt-3 inline-flex items-center gap-1.5 text-[12px] font-medium"
         style={{
           color: sold
             ? 'var(--ink-muted)'
             : canOrder
-            ? 'var(--ink)'
+            ? 'var(--terra)'
             : 'var(--ink-muted)',
           letterSpacing: '0.04em',
-          cursor: sold ? 'not-allowed' : 'pointer',
         }}
       >
         {sold ? (
           '— sold out —'
         ) : canOrder ? (
-          <>Add to cart <Plus size={12} /></>
+          <>View &amp; add <span className="arrow">→</span></>
         ) : (
           <>Pick your area <Lock size={11} /></>
         )}
-      </button>
-    </div>
+      </span>
+    </button>
   );
 }
 
@@ -986,6 +1043,299 @@ function BrowseModeBanner({
         >
           <MapPin size={11} /> {browsing ? 'Pick an area' : 'Set area'}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Drink detail modal — carousel + qty + add-to-cart ─── */
+function DrinkDetailModal({
+  drink,
+  canOrder,
+  onClose,
+  onAdd,
+  onPickArea,
+}: {
+  drink: DrinkWithCategory;
+  canOrder: boolean;
+  onClose: () => void;
+  onAdd: (qty: number) => void;
+  onPickArea: () => void;
+}) {
+  const photos = useMemo(() => drinkPhotos(drink.name, drink.photo), [drink.name, drink.photo]);
+  const [photoIndex, setPhotoIndex] = useState(0);
+  const [qty, setQty] = useState(1);
+
+  const sold = !drink.in_stock;
+  const cat = drink.categories;
+
+  // Reset to first photo if drink changes (e.g. user closes + opens another)
+  useEffect(() => {
+    setPhotoIndex(0);
+    setQty(1);
+  }, [drink.id]);
+
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+      else if (e.key === 'ArrowLeft' && photos.length > 1) {
+        setPhotoIndex((i) => (i - 1 + photos.length) % photos.length);
+      } else if (e.key === 'ArrowRight' && photos.length > 1) {
+        setPhotoIndex((i) => (i + 1) % photos.length);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose, photos.length]);
+
+  // Lock body scroll while open
+  useEffect(() => {
+    const original = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => { document.body.style.overflow = original; };
+  }, []);
+
+  const total = drink.price * qty;
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-end md:items-center justify-center"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={drink.name}
+    >
+      {/* Scrim */}
+      <div
+        className="absolute inset-0"
+        style={{ background: 'rgba(28,23,18,0.6)', backdropFilter: 'blur(4px)' }}
+      />
+
+      {/* Sheet */}
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full md:max-w-[440px] flex flex-col"
+        style={{
+          background: 'var(--bone)',
+          borderTopLeftRadius: 22,
+          borderTopRightRadius: 22,
+          borderBottomLeftRadius: 22,
+          borderBottomRightRadius: 22,
+          maxHeight: '92vh',
+          boxShadow: '0 -30px 80px -20px rgba(28,23,18,0.45)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Close button (floats over photo) */}
+        <button
+          onClick={onClose}
+          aria-label="Close"
+          className="absolute top-3 right-3 z-[2] inline-flex items-center justify-center"
+          style={{
+            width: 36, height: 36, borderRadius: 999,
+            background: 'rgba(252,247,235,0.92)',
+            color: 'var(--ink)',
+            border: '1px solid rgba(28,23,18,0.08)',
+            backdropFilter: 'blur(8px)',
+          }}
+        >
+          <X size={18} />
+        </button>
+
+        {/* Carousel */}
+        <div
+          className="relative grain"
+          style={{ aspectRatio: '1 / 1', background: 'var(--cream)', flexShrink: 0 }}
+        >
+          {photos.map((src, i) => (
+            <Image
+              key={src}
+              src={src}
+              alt={`${drink.name} — photo ${i + 1}`}
+              fill
+              sizes="(max-width: 640px) 100vw, 440px"
+              className="object-cover transition-opacity duration-500"
+              style={{ opacity: i === photoIndex ? 1 : 0 }}
+              priority={i === 0}
+            />
+          ))}
+
+          {/* Sold-out chip */}
+          {sold && (
+            <span
+              className="absolute top-3 left-3 z-[2]"
+              style={{
+                fontSize: 10, letterSpacing: '0.18em', textTransform: 'uppercase',
+                background: 'var(--ink)', color: 'var(--bone)',
+                padding: '5px 10px', borderRadius: 999, fontWeight: 500,
+              }}
+            >
+              Sold out
+            </span>
+          )}
+
+          {photos.length > 1 && (
+            <>
+              {/* Arrows */}
+              <button
+                onClick={() => setPhotoIndex((i) => (i - 1 + photos.length) % photos.length)}
+                aria-label="Previous photo"
+                className="absolute top-1/2 -translate-y-1/2 left-3 inline-flex items-center justify-center"
+                style={{
+                  width: 36, height: 36, borderRadius: 999,
+                  background: 'rgba(252,247,235,0.92)',
+                  color: 'var(--ink)',
+                  border: '1px solid rgba(28,23,18,0.08)',
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <ChevronLeft size={18} />
+              </button>
+              <button
+                onClick={() => setPhotoIndex((i) => (i + 1) % photos.length)}
+                aria-label="Next photo"
+                className="absolute top-1/2 -translate-y-1/2 right-3 inline-flex items-center justify-center"
+                style={{
+                  width: 36, height: 36, borderRadius: 999,
+                  background: 'rgba(252,247,235,0.92)',
+                  color: 'var(--ink)',
+                  border: '1px solid rgba(28,23,18,0.08)',
+                  backdropFilter: 'blur(8px)',
+                }}
+              >
+                <ChevronRight size={18} />
+              </button>
+
+              {/* Dot indicators */}
+              <div
+                className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-2 py-1.5 rounded-full"
+                style={{ background: 'rgba(28,23,18,0.45)', backdropFilter: 'blur(8px)' }}
+              >
+                {photos.map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setPhotoIndex(i)}
+                    aria-label={`Photo ${i + 1}`}
+                    style={{
+                      width: i === photoIndex ? 18 : 6,
+                      height: 6,
+                      borderRadius: 999,
+                      background: i === photoIndex ? 'var(--bone)' : 'rgba(252,247,235,0.55)',
+                      transition: 'all 220ms ease',
+                    }}
+                  />
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Body — scrolls if content overflows */}
+        <div className="flex-1 overflow-y-auto" style={{ padding: '20px 22px 8px' }}>
+          {cat && (
+            <span
+              className="eyebrow inline-flex items-center gap-1.5"
+              style={{ color: 'var(--ink-muted)' }}
+            >
+              {cat.emoji && <span aria-hidden>{cat.emoji}</span>}
+              {cat.name}
+            </span>
+          )}
+          <div className="mt-2 flex items-baseline justify-between gap-3">
+            <h2
+              className="display"
+              style={{ fontSize: 'clamp(1.8rem, 5vw, 2.4rem)', lineHeight: 1.05, letterSpacing: '-0.02em' }}
+            >
+              {drink.name}
+            </h2>
+            <span
+              className="serif"
+              style={{ fontSize: 22, color: 'var(--terra)', letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}
+            >
+              {pkr(drink.price)}
+            </span>
+          </div>
+          {drink.description && (
+            <p
+              className="mt-3"
+              style={{ color: 'var(--ink-soft)', fontSize: 14, lineHeight: 1.6 }}
+            >
+              {drink.description}
+            </p>
+          )}
+        </div>
+
+        {/* Footer — qty + CTA */}
+        <div
+          className="flex items-center gap-3"
+          style={{
+            padding: '16px 22px 22px',
+            borderTop: '1px solid var(--line)',
+            background: 'var(--bone)',
+          }}
+        >
+          {/* Qty stepper — disabled if sold or can't order */}
+          <div
+            className="inline-flex items-center"
+            style={{
+              border: '1px solid var(--line-strong)',
+              borderRadius: 999,
+              opacity: sold || !canOrder ? 0.5 : 1,
+            }}
+          >
+            <button
+              onClick={() => setQty((q) => Math.max(1, q - 1))}
+              disabled={sold || !canOrder || qty <= 1}
+              aria-label="Decrease quantity"
+              className="inline-flex items-center justify-center"
+              style={{ width: 38, height: 38 }}
+            >
+              <Minus size={14} />
+            </button>
+            <span
+              className="serif"
+              style={{ width: 28, textAlign: 'center', fontSize: 16 }}
+              aria-live="polite"
+            >
+              {qty}
+            </span>
+            <button
+              onClick={() => setQty((q) => Math.min(99, q + 1))}
+              disabled={sold || !canOrder || qty >= 99}
+              aria-label="Increase quantity"
+              className="inline-flex items-center justify-center"
+              style={{ width: 38, height: 38 }}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+
+          {/* CTA — three states: sold / pick-area / add */}
+          {sold ? (
+            <button disabled className="btn btn-outline" style={{ flex: 1, opacity: 0.6 }}>
+              Sold out
+            </button>
+          ) : canOrder ? (
+            <button
+              onClick={() => onAdd(qty)}
+              className="btn btn-terra"
+              style={{ flex: 1 }}
+            >
+              <span>Add — {pkr(total)}</span>
+              <span className="arrow">↗</span>
+            </button>
+          ) : (
+            <button
+              onClick={onPickArea}
+              className="btn btn-outline"
+              style={{ flex: 1 }}
+            >
+              <MapPin size={14} style={{ marginRight: 6 }} />
+              Pick your area to order
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

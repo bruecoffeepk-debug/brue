@@ -121,6 +121,27 @@ export const DRINK_PHOTO: Record<string, string> = {
   'Brownie': '/drinks/brownie.jpg',
 };
 
+// Additional photos shown in the drink-detail modal carousel.
+// Primary photo (DRINK_PHOTO above) is always slot 0; these come after.
+// Add an entry per drink that has alt shots ready in /public/drinks/.
+export const DRINK_ALT_PHOTOS: Record<string, string[]> = {
+  'Tiramisu Affogato': [
+    '/drinks/tiramisu-affogato-2.jpg',
+    '/drinks/tiramisu-affogato-3.jpg',
+  ],
+  'Tiramisu in a Cup': [
+    '/drinks/tiramisu-cup-2.jpg',
+  ],
+};
+
+/** All photos for a drink, primary first. Always returns at least 1 entry. */
+export function drinkPhotos(name: string, primary: string | null): string[] {
+  const main = primary || DRINK_PHOTO[name] || '/Brue_DP_Orange.png';
+  const alts = DRINK_ALT_PHOTOS[name] || [];
+  // Dedupe in case primary is also listed in alts
+  return Array.from(new Set([main, ...alts]));
+}
+
 export type MenuItem = {
   id: string;
   name: string;

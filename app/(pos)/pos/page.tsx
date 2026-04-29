@@ -36,6 +36,7 @@ export default function PosPage() {
   const [payment, setPayment] = useState<string>('Cash');
   const [notes, setNotes] = useState('');
   const [promoCode, setPromoCode] = useState('');
+  const [waPhone, setWaPhone] = useState('');
   const [showCustomers, setShowCustomers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [posErr, setPosErr] = useState<string | null>(null);
@@ -54,6 +55,13 @@ export default function PosPage() {
 
   const customer = customers.find((c) => c.id === customerId) || null;
   const discountPct = customer?.discount_percent ?? 0;
+
+  // When cashier picks a customer, autofill the WhatsApp number from their
+  // record. Cashier can still overwrite it for this transaction. Don't blow
+  // away a manually-entered number when they pick the same customer twice.
+  useEffect(() => {
+    if (customer?.phone && !waPhone) setWaPhone(customer.phone);
+  }, [customer]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.quantity, 0);
   const customerDiscount = Math.round((subtotal * discountPct) / 100);
@@ -129,13 +137,21 @@ export default function PosPage() {
     if (cart.length === 0 || busy) return;
     setBusy(true);
     setPosErr(null);
+
+    // Open the WhatsApp tab BEFORE the async save. Browsers tie window.open
+    // to the click gesture; if we waited for the network round-trip first,
+    // the popup blocker would catch it. We point the new tab at about:blank
+    // and rewrite its URL once the order id is known.
+    const phone = sanitisePhone(waPhone);
+    const popup = phone ? window.open('about:blank', '_blank') : null;
+
     try {
       const { data: order, error } = await supabase
         .from('orders')
         .insert({
           customer_id: customerId,
           customer_name: customer?.name ?? null,
-          customer_phone: customer?.phone ?? null,
+          customer_phone: phone || customer?.phone || null,
           order_type: orderType.toLowerCase(),
           payment_method: payment,
           subtotal,
@@ -146,7 +162,7 @@ export default function PosPage() {
           status: 'completed',
           channel: 'pos',
         })
-        .select('id')
+        .select('id, order_number')
         .single();
       if (error) throw error;
       if (!order?.id) throw new Error('Order saved but no id returned');
@@ -164,11 +180,29 @@ export default function PosPage() {
       if (itemsErr) {
         // Best-effort cleanup so we don't leave a half-built order around
         await supabase.from('orders').delete().eq('id', order.id);
+        if (popup) popup.close();
         throw itemsErr;
+      }
+
+      // Send the customer-facing receipt URL via WhatsApp if we have a number.
+      if (popup && phone) {
+        const receiptUrl = `${window.location.origin}/r/${order.id}`;
+        const customerName = (customer?.name || '').split(' ')[0] || 'there';
+        const msg =
+          `Hi ${customerName} 👋 — thanks for your order from BRUE!\n\n` +
+          `Order #${order.order_number} · ${pkr(total)} · paid via ${payment}.\n\n` +
+          `Receipt: ${receiptUrl}\n\n` +
+          `— BRUE`;
+        popup.location.href = `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+      } else if (popup) {
+        popup.close();
       }
 
       router.push(`/receipt/${order.id}`);
     } catch (e: any) {
+      if (popup) {
+        try { popup.close(); } catch {}
+      }
       console.error('[pos] placeOrder failed', e);
       setPosErr(
         e?.message ||
@@ -177,6 +211,13 @@ export default function PosPage() {
       setBusy(false);
     }
   };
+
+  /** Strip everything that isn't a digit. WhatsApp deep links want pure digits
+   *  with no `+`. Returns "" if the result is too short to be a real phone. */
+  function sanitisePhone(s: string): string {
+    const d = s.replace(/\D+/g, '').replace(/^0+/, '');
+    return d.length >= 10 ? d : '';
+  }
 
   const cats = ['All', ...CATEGORIES];
 
@@ -389,6 +430,30 @@ export default function PosPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+
+          <div>
+            <input
+              className="field !py-2 !text-sm"
+              placeholder="WhatsApp number (sends receipt)"
+              value={waPhone}
+              onChange={(e) => setWaPhone(e.target.value)}
+              inputMode="tel"
+              autoComplete="off"
+              type="tel"
+            />
+            {waPhone.trim() && (
+              <p
+                className="mt-1 text-xs"
+                style={{
+                  color: sanitisePhone(waPhone) ? 'var(--sage, #6b7a53)' : 'var(--ink-muted, #7a6c5d)',
+                }}
+              >
+                {sanitisePhone(waPhone)
+                  ? `✓ Receipt will WhatsApp to +${sanitisePhone(waPhone)}`
+                  : 'Need at least 10 digits'}
+              </p>
+            )}
+          </div>
 
           <div>
             <input

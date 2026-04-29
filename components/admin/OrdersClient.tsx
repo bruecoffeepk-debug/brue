@@ -193,11 +193,33 @@ export default function OrdersClient({
   function advance(o: Order) {
     const flow = STATUS_FLOW[o.status];
     if (!flow) return;
+
+    // When the staff confirms an order (pending → accepted) we automatically
+    // open a WhatsApp tab pre-filled with the same status message + receipt
+    // link the manual "Send update" button uses. The popup is opened during
+    // the click handler so browsers don't block it; we point at about:blank
+    // and rewrite the URL after the server action returns. If there's no
+    // customer phone (cashier didn't capture one), we skip silently.
+    const shouldNotify = flow.next === 'accepted' && Boolean(o.customer_phone);
+    const popup = shouldNotify ? window.open('about:blank', '_blank') : null;
+
     start(async () => {
       try {
         await setStatus(o.id, flow.next);
         router.refresh();
+
+        if (popup && o.customer_phone) {
+          const receiptUrl = `${window.location.origin}/r/${o.id}`;
+          const msg = buildStatusMessage(
+            { ...o, status: flow.next },
+            receiptUrl
+          );
+          popup.location.href = `https://wa.me/${sanitizePhone(o.customer_phone)}?text=${encodeURIComponent(msg)}`;
+        }
       } catch (e: any) {
+        if (popup) {
+          try { popup.close(); } catch {}
+        }
         alert(e?.message ?? 'Could not update status');
       }
     });

@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation';
 import { Printer, MessageCircle, MapPin } from 'lucide-react';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { pkr } from '@/lib/utils';
 import { SHOP } from '@/lib/shop';
 import PrintButton from './PrintButton';
@@ -25,17 +25,30 @@ const STATUS_LABEL: Record<string, { text: string; color: string; bg: string }> 
 };
 
 export default async function Receipt({ params }: { params: { id: string } }) {
-  const supabase = createClient();
+  // Lightweight UUID format check so a bad URL returns 404 fast (and we
+  // don't waste a service-role round-trip on obvious junk).
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(params.id)) {
+    notFound();
+  }
+
+  // Service-role client: anon RLS no longer permits SELECT on orders /
+  // order_items (see migration 006). The receipt page has the order id
+  // because the user just placed it — we trust the URL parameter.
+  const supabase = createAdminClient();
+  // Only select columns we render — we never want to ship cost/admin-only
+  // fields to the public HTML.
   const { data: order } = await supabase
     .from('orders')
-    .select('*')
+    .select(
+      'id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_method, delivery_distance_km, payment_method, subtotal, discount, total, notes, status, created_at'
+    )
     .eq('id', params.id)
     .maybeSingle();
   if (!order) notFound();
 
   const { data: items } = await supabase
     .from('order_items')
-    .select('*')
+    .select('id, name, quantity, price, line_total')
     .eq('order_id', params.id);
 
   const status = STATUS_LABEL[order.status as string] ?? STATUS_LABEL.pending;

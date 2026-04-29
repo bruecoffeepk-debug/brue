@@ -8,11 +8,13 @@ export const dynamic = 'force-dynamic';
 
 async function loadMenu(): Promise<{ drinks: DrinkWithCategory[]; categories: Category[] }> {
   const supabase = createClient();
+  // menu_items_public is a view that excludes the `cost` column — internal margin
+  // never reaches the browser bundle. The view also already filters to active = true.
+  // See migration 006_security_lockdown.sql.
   const [drinksRes, catsRes] = await Promise.all([
     supabase
-      .from('menu_items')
+      .from('menu_items_public')
       .select('*, categories ( id, name, slug, emoji )')
-      .eq('active', true)
       .order('sort_order', { ascending: true }),
     supabase
       .from('categories')

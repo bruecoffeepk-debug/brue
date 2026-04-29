@@ -145,9 +145,8 @@ alter table order_items enable row level security;
 alter table expenses    enable row level security;
 alter table categories  enable row level security;
 
--- menu_items: anyone reads active drinks; staff full
-create policy "menu_public_read" on menu_items
-  for select to anon, authenticated using (active = true);
+-- menu_items: staff full; ANON reads through the menu_items_public view
+-- below (which excludes the `cost` column so margin doesn't leak).
 create policy "menu_staff_all" on menu_items
   for all to authenticated using (true) with check (true);
 
@@ -163,28 +162,43 @@ create policy "customers_staff_all" on customers
 create policy "customers_public_insert" on customers
   for insert to anon with check (true);
 
--- orders: staff full; anon can insert pending orders from the web/whatsapp channel;
--- anon can read any order (receipt pages look up by uuid, which is unguessable).
+-- orders: staff full; anon can ONLY insert pending web/whatsapp orders.
+-- Public SELECT is intentionally NOT granted — that would leak every
+-- customer name/phone/address through the public REST endpoint. The
+-- receipt page (/r/[id]) reads orders via the SERVICE ROLE Supabase
+-- client server-side. See lib/supabase/admin.ts and migration 006.
 create policy "orders_staff_all" on orders
   for all to authenticated using (true) with check (true);
 create policy "orders_public_insert" on orders
   for insert to anon with check (
     channel in ('web', 'whatsapp') and status = 'pending'
   );
-create policy "orders_public_read_by_id" on orders
-  for select to anon using (true);
 
--- order_items: staff full; anon can insert + read (paired with orders policy)
+-- order_items: staff full; anon can ONLY insert (no public SELECT — see note above)
 create policy "order_items_staff_all" on order_items
   for all to authenticated using (true) with check (true);
 create policy "order_items_public_insert" on order_items
   for insert to anon with check (true);
-create policy "order_items_public_read" on order_items
-  for select to anon using (true);
 
 -- expenses: staff only
 create policy "expenses_staff_all" on expenses
   for all to authenticated using (true) with check (true);
+
+-- ┌─────────────────────────────────────────────────────────┐
+-- │ 3b. PUBLIC MENU VIEW (excludes the `cost` column)       │
+-- └─────────────────────────────────────────────────────────┘
+-- Public reads use this view so internal margin (`cost`) never reaches
+-- the browser bundle. Server-side reads (admin/POS, authenticated
+-- session) keep using the menu_items table directly.
+
+create or replace view menu_items_public as
+select
+  id, name, category, category_id, description, price, photo,
+  active, in_stock, sort_order, created_at, updated_at
+from menu_items
+where active = true;
+
+grant select on menu_items_public to anon, authenticated;
 
 -- ┌─────────────────────────────────────────────────────────┐
 -- │ 4. STORAGE — drink-photos bucket                        │

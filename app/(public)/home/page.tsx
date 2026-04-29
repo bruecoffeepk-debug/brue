@@ -12,10 +12,10 @@ export const dynamic = 'force-dynamic';
 
 async function getFeatured(): Promise<DrinkWithCategory[]> {
   const supabase = createClient();
+  // menu_items_public excludes `cost` so margin doesn't leak to the browser.
   const { data } = await supabase
-    .from('menu_items')
+    .from('menu_items_public')
     .select('*, categories ( id, name, slug, emoji )')
-    .eq('active', true)
     .order('sort_order', { ascending: true })
     .limit(8);
   return (data ?? []) as any;
@@ -24,11 +24,10 @@ async function getFeatured(): Promise<DrinkWithCategory[]> {
 async function getStats() {
   const supabase = createClient();
   const [{ count: drinks }, { data: cheapest }] = await Promise.all([
-    supabase.from('menu_items').select('*', { count: 'exact', head: true }).eq('active', true),
+    supabase.from('menu_items_public').select('*', { count: 'exact', head: true }),
     supabase
-      .from('menu_items')
+      .from('menu_items_public')
       .select('price')
-      .eq('active', true)
       .order('price', { ascending: true })
       .limit(1),
   ]);

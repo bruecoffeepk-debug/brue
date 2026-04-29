@@ -68,9 +68,11 @@ export default function MenuClient({
     setCart((c) => {
       const exists = c.find((l) => l.id === d.id);
       if (exists) return c.map((l) => (l.id === d.id ? { ...l, qty: l.qty + 1 } : l));
+      // Note: cost is NOT carried client-side. The /api/orders route looks
+      // up the canonical cost from menu_items.id server-side. See migration 006.
       return [
         ...c,
-        { id: d.id, name: d.name, price: d.price, cost: d.cost ?? 0, qty: 1, photo: d.photo },
+        { id: d.id, name: d.name, price: d.price, cost: 0, qty: 1, photo: d.photo },
       ];
     });
   }

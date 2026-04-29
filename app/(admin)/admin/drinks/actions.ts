@@ -4,6 +4,20 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
 
+/**
+ * Defense-in-depth: every admin server action must call this first. Without it,
+ * we rely entirely on RLS — a single misconfigured policy could turn every
+ * action below into a public mutation endpoint. Explicit > implicit.
+ */
+async function requireStaff() {
+  const supabase = createClient();
+  const { data, error } = await supabase.auth.getUser();
+  if (error || !data?.user) {
+    throw new Error('Unauthorised — please sign in');
+  }
+  return supabase;
+}
+
 function bust() {
   // Refresh anything that reads menu_items
   revalidatePath('/');
@@ -14,7 +28,7 @@ function bust() {
 }
 
 export async function createDrink(formData: FormData) {
-  const supabase = createClient();
+  const supabase = await requireStaff();
   const payload = formPayload(formData);
   const { data, error } = await supabase
     .from('menu_items')
@@ -27,7 +41,7 @@ export async function createDrink(formData: FormData) {
 }
 
 export async function updateDrink(id: string, formData: FormData) {
-  const supabase = createClient();
+  const supabase = await requireStaff();
   const payload = formPayload(formData);
   const { error } = await supabase.from('menu_items').update(payload).eq('id', id);
   if (error) throw new Error(error.message);
@@ -36,7 +50,7 @@ export async function updateDrink(id: string, formData: FormData) {
 }
 
 export async function deleteDrink(id: string) {
-  const supabase = createClient();
+  const supabase = await requireStaff();
   const { error } = await supabase.from('menu_items').delete().eq('id', id);
   if (error) throw new Error(error.message);
   bust();
@@ -44,7 +58,7 @@ export async function deleteDrink(id: string) {
 }
 
 export async function toggleStock(id: string, nextValue: boolean) {
-  const supabase = createClient();
+  const supabase = await requireStaff();
   const { error } = await supabase
     .from('menu_items')
     .update({ in_stock: nextValue })
@@ -54,7 +68,7 @@ export async function toggleStock(id: string, nextValue: boolean) {
 }
 
 export async function toggleActive(id: string, nextValue: boolean) {
-  const supabase = createClient();
+  const supabase = await requireStaff();
   const { error } = await supabase
     .from('menu_items')
     .update({ active: nextValue })

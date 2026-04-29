@@ -59,7 +59,35 @@ function bad(msg: string, status = 400) {
   return NextResponse.json({ error: msg }, { status });
 }
 
+/**
+ * Public POST entry. Wraps the real handler so ANY uncaught throw —
+ * a missing env var, a Supabase outage, an Upstash hiccup — turns into
+ * a JSON error response instead of an empty-body 500. The client used
+ * to crash on `res.json()` ("Unexpected end of JSON input") whenever
+ * Next.js fell back to its default error page.
+ */
 export async function POST(req: Request) {
+  try {
+    return await handleOrder(req);
+  } catch (err: any) {
+    const message =
+      typeof err?.message === 'string' ? err.message : 'Unexpected server error';
+    // Log the full error server-side; surface a safe, actionable message to
+    // the client. Don't leak internals.
+    console.error('[/api/orders] uncaught error:', err);
+
+    // Common config errors → friendlier text.
+    let publicMsg = 'Something went wrong placing your order. Please try again, or WhatsApp us.';
+    if (message.includes('SUPABASE_SERVICE_ROLE_KEY')) {
+      publicMsg = 'Server is missing configuration — please WhatsApp us to place this order.';
+    } else if (message.includes('UPSTASH_')) {
+      publicMsg = 'Rate limiter misconfigured — please WhatsApp us.';
+    }
+    return NextResponse.json({ error: publicMsg }, { status: 500 });
+  }
+}
+
+async function handleOrder(req: Request) {
   // ── origin allow-list (cheap CSRF / cross-site protection) ──
   // Browsers send Origin on POSTs; if it's set and doesn't match our host,
   // refuse. Same-origin form posts and our own fetch() calls always pass.

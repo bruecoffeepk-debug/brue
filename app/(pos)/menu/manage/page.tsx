@@ -34,6 +34,10 @@ export default function ManageMenu() {
 
   const save = async () => {
     if (!editing) return;
+    if (!editing.name?.trim()) {
+      alert('Name is required');
+      return;
+    }
     const payload = {
       name: editing.name,
       category: editing.category,
@@ -44,17 +48,28 @@ export default function ManageMenu() {
       active: editing.active ?? true,
       sort_order: Number(editing.sort_order) || 100,
     };
-    if (editing.id) {
-      await supabase.from('menu_items').update(payload).eq('id', editing.id);
-    } else {
-      await supabase.from('menu_items').insert(payload);
+    const { error } = editing.id
+      ? await supabase.from('menu_items').update(payload).eq('id', editing.id)
+      : await supabase.from('menu_items').insert(payload);
+    if (error) {
+      console.error('[menu/manage] save failed', error);
+      alert(`Couldn't save: ${error.message || 'unknown error'}`);
+      return;
     }
     setEditing(null);
     load();
   };
 
   const toggleActive = async (item: MenuItem) => {
-    await supabase.from('menu_items').update({ active: !item.active }).eq('id', item.id);
+    const { error } = await supabase
+      .from('menu_items')
+      .update({ active: !item.active })
+      .eq('id', item.id);
+    if (error) {
+      console.error('[menu/manage] toggleActive failed', error);
+      alert(`Couldn't toggle: ${error.message || 'unknown error'}`);
+      return;
+    }
     load();
   };
 

@@ -36,6 +36,7 @@ export default function PosPage() {
   const [notes, setNotes] = useState('');
   const [showCustomers, setShowCustomers] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [posErr, setPosErr] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -94,6 +95,7 @@ export default function PosPage() {
   const placeOrder = async () => {
     if (cart.length === 0 || busy) return;
     setBusy(true);
+    setPosErr(null);
     try {
       const { data: order, error } = await supabase
         .from('orders')
@@ -113,6 +115,7 @@ export default function PosPage() {
         .select('id')
         .single();
       if (error) throw error;
+      if (!order?.id) throw new Error('Order saved but no id returned');
 
       const rows = cart.map((l) => ({
         order_id: order.id,
@@ -123,11 +126,20 @@ export default function PosPage() {
         quantity: l.quantity,
         line_total: l.price * l.quantity,
       }));
-      await supabase.from('order_items').insert(rows);
+      const { error: itemsErr } = await supabase.from('order_items').insert(rows);
+      if (itemsErr) {
+        // Best-effort cleanup so we don't leave a half-built order around
+        await supabase.from('orders').delete().eq('id', order.id);
+        throw itemsErr;
+      }
 
       router.push(`/receipt/${order.id}`);
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      console.error('[pos] placeOrder failed', e);
+      setPosErr(
+        e?.message ||
+          (typeof e === 'string' ? e : 'Could not save order — check connection and try again.')
+      );
       setBusy(false);
     }
   };
@@ -319,6 +331,20 @@ export default function PosPage() {
             <span className="h-display text-3xl text-terracotta">{pkr(total)}</span>
           </div>
         </div>
+
+        {posErr && (
+          <div
+            role="alert"
+            className="mt-4 px-3 py-2 rounded-lg text-sm"
+            style={{
+              background: 'rgba(196,69,38,0.08)',
+              color: '#9a3419',
+              border: '1px solid rgba(196,69,38,0.2)',
+            }}
+          >
+            {posErr}
+          </div>
+        )}
 
         <button
           onClick={placeOrder}

@@ -393,12 +393,38 @@ function CheckoutDrawer({
           })),
         }),
       });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json?.error || 'Could not place order');
+
+      // Read body as text first — Vercel/Next.js sometimes returns empty 500s
+      // (e.g. uncaught import-time error in the route) and `res.json()` would
+      // throw "Unexpected end of JSON input" before we got a chance to inspect
+      // res.ok. Parse defensively and fall back to a useful message.
+      const raw = await res.text();
+      let json: any = null;
+      if (raw) {
+        try { json = JSON.parse(raw); } catch { /* not JSON — could be HTML 500 */ }
+      }
+
+      if (!res.ok) {
+        const fallback =
+          res.status === 500
+            ? 'Server hiccup — please try again, or WhatsApp us if it keeps failing.'
+            : res.status === 429
+            ? 'Slow down — too many orders from this device. Try again in a moment.'
+            : `Could not place order (HTTP ${res.status})`;
+        throw new Error(json?.error || fallback);
+      }
+      if (!json || !json.id) {
+        throw new Error('Order placed but no confirmation received — please WhatsApp us to verify.');
+      }
       setPlaced(json);
       setStep('placed');
     } catch (e: any) {
-      setSubmitErr(e?.message || 'Could not place order');
+      // Generic network errors (offline, DNS, CORS) land here too
+      const msg =
+        e?.name === 'TypeError'
+          ? 'No connection — check your internet and try again.'
+          : e?.message || 'Could not place order';
+      setSubmitErr(msg);
     } finally {
       setSubmitting(false);
     }

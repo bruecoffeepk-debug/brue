@@ -34,22 +34,39 @@ export default async function Receipt({ params }: { params: { id: string } }) {
   // Service-role client: anon RLS no longer permits SELECT on orders /
   // order_items (see migration 006). The receipt page has the order id
   // because the user just placed it — we trust the URL parameter.
-  const supabase = createAdminClient();
-  // Only select columns we render — we never want to ship cost/admin-only
-  // fields to the public HTML.
-  const { data: order } = await supabase
-    .from('orders')
-    .select(
-      'id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_method, delivery_distance_km, payment_method, subtotal, discount, total, notes, status, created_at'
-    )
-    .eq('id', params.id)
-    .maybeSingle();
-  if (!order) notFound();
+  // If the env var isn't set, render a friendly fallback instead of a 500.
+  let order: any = null;
+  let items: any[] = [];
+  let configError = false;
+  try {
+    const supabase = createAdminClient();
+    // Only select columns we render — we never want to ship cost/admin-only
+    // fields to the public HTML.
+    const orderRes = await supabase
+      .from('orders')
+      .select(
+        'id, order_number, customer_name, customer_phone, order_type, delivery_address, delivery_method, delivery_distance_km, payment_method, subtotal, discount, total, notes, status, created_at'
+      )
+      .eq('id', params.id)
+      .maybeSingle();
+    order = orderRes.data;
 
-  const { data: items } = await supabase
-    .from('order_items')
-    .select('id, name, quantity, price, line_total')
-    .eq('order_id', params.id);
+    if (order) {
+      const itemsRes = await supabase
+        .from('order_items')
+        .select('id, name, quantity, price, line_total')
+        .eq('order_id', params.id);
+      items = itemsRes.data || [];
+    }
+  } catch (err) {
+    console.error('[/r/[id]] failed to load order:', err);
+    configError = true;
+  }
+
+  if (configError) {
+    return <ServiceUnavailable orderId={params.id} />;
+  }
+  if (!order) notFound();
 
   const status = STATUS_LABEL[order.status as string] ?? STATUS_LABEL.pending;
   const wa = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
@@ -316,4 +333,82 @@ function prettyType(t: string): string {
 }
 function prettyMethod(m: string): string {
   return ({ bykea: 'Bykea', indrive: 'inDrive', whatsapp: 'WhatsApp' } as any)[m] || m;
+}
+
+/**
+ * Friendly fallback rendered when SUPABASE_SERVICE_ROLE_KEY isn't set
+ * (or another exception killed the DB read). The customer still gets
+ * useful info — their order id + a WhatsApp deep link to confirm with
+ * the bar — instead of a Next.js 500 error page.
+ */
+function ServiceUnavailable({ orderId }: { orderId: string }) {
+  const wa = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
+  const shortId = orderId.split('-')[0];
+  const waLink = wa
+    ? `https://wa.me/${wa}?text=${encodeURIComponent(
+        `Hi BRUE — checking on my order. Reference: ${orderId}`
+      )}`
+    : '#';
+  return (
+    <main
+      className="grain min-h-screen flex items-center justify-center px-5 py-10"
+      style={{ background: 'var(--paper)' }}
+    >
+      <div
+        className="max-w-[520px] w-full"
+        style={{
+          background: 'var(--bone)',
+          borderRadius: 18,
+          border: '1px solid var(--line)',
+          padding: 'clamp(28px, 5vw, 44px)',
+          boxShadow: '0 36px 80px -30px rgba(28,23,18,0.28)',
+        }}
+      >
+        <Wordmark tone="terra" size={28} />
+        <span
+          className="eyebrow mt-6 inline-block"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          Receipt unavailable right now
+        </span>
+        <h1 className="display mt-2" style={{ fontSize: 'clamp(2rem, 4vw, 2.6rem)' }}>
+          We&apos;ve <span className="ital">received</span> your order.
+        </h1>
+        <p
+          className="mt-4 serif"
+          style={{ color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}
+        >
+          The receipt page is temporarily down. Your reference is{' '}
+          <span className="serif italic" style={{ color: 'var(--terra)' }}>
+            #{shortId}
+          </span>
+          . Please WhatsApp us with this reference and we&apos;ll confirm + brew
+          right away.
+        </p>
+        {wa && (
+          <a
+            href={waLink}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-terra mt-6"
+            style={{ display: 'inline-flex' }}
+          >
+            <MessageCircle size={14} />
+            WhatsApp us
+          </a>
+        )}
+        <p
+          className="mt-6"
+          style={{
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-muted)',
+          }}
+        >
+          Reference · {orderId}
+        </p>
+      </div>
+    </main>
+  );
 }

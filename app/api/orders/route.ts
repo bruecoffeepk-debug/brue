@@ -20,6 +20,8 @@
 
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { checkOrderRateLimit } from '@/lib/ratelimit';
+import { getClientIp } from '@/lib/clientIp';
 import {
   SHOP,
   findDeliveryArea,
@@ -56,6 +58,53 @@ function bad(msg: string, status = 400) {
 }
 
 export async function POST(req: Request) {
+  // ── origin allow-list (cheap CSRF / cross-site protection) ──
+  // Browsers send Origin on POSTs; if it's set and doesn't match our host,
+  // refuse. Same-origin form posts and our own fetch() calls always pass.
+  // Server-to-server (curl, no Origin) is allowed because legitimate
+  // automation sometimes wants this — combined with rate limiting + the
+  // server-side price lookup, the blast radius stays small.
+  const originHeader = req.headers.get('origin');
+  if (originHeader) {
+    const expectedHost = req.headers.get('host');
+    let originHost = '';
+    try {
+      originHost = new URL(originHeader).host;
+    } catch {
+      return bad('Bad origin', 400);
+    }
+    if (expectedHost && originHost !== expectedHost) {
+      // Allow Vercel preview deploys (*.vercel.app) and the main prod host.
+      const isAllowed =
+        originHost === expectedHost ||
+        originHost.endsWith('.vercel.app') ||
+        originHost === 'bruecoffeepk.com' ||
+        originHost === 'www.bruecoffeepk.com' ||
+        originHost === 'localhost:3000' ||
+        originHost.startsWith('localhost:');
+      if (!isAllowed) return bad('Cross-origin request blocked', 403);
+    }
+  }
+
+  // ── rate limit (per IP) BEFORE any work ──
+  // 5 / minute (burst) and 30 / hour. Fails open if Upstash isn't configured.
+  const ip = getClientIp(req);
+  const rl = await checkOrderRateLimit(ip);
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error:
+          rl.reason === 'burst'
+            ? `Too many orders from this device — wait ${rl.retryAfterSec}s and try again.`
+            : `Hourly limit reached. Please WhatsApp us instead — try again in ${Math.ceil(rl.retryAfterSec / 60)} min.`,
+      },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(rl.retryAfterSec) },
+      }
+    );
+  }
+
   let body: IncomingPayload;
   try {
     body = (await req.json()) as IncomingPayload;

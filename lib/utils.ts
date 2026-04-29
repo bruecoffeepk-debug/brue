@@ -113,7 +113,12 @@ export const DRINK_PHOTO: Record<string, string> = {
   // 'Strawberry Mocha' (New Recipe) — duplicate name; see note above
 
   // ─── Dessert ──────────────────────────────────────────────
-  // No photos yet — Tiramisu Affogato, Tiramisu in a Cup, Brownie
+  // Real product photos. Each item also has alternate shots in /public/drinks/
+  // (tiramisu-affogato-2.jpg, tiramisu-affogato-3.jpg, tiramisu-cup-2.jpg) that
+  // the admin page can swap to via /admin/drinks if you want to A/B them.
+  'Tiramisu Affogato': '/drinks/tiramisu-affogato.jpg',
+  'Tiramisu in a Cup': '/drinks/tiramisu-cup.jpg',
+  'Brownie': '/drinks/brownie.jpg',
 };
 
 export type MenuItem = {

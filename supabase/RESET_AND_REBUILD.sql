@@ -307,9 +307,9 @@ insert into menu_items (name, category, description, price, cost, photo, sort_or
   ('Strawberry Mocha',     'New Recipe', 'Strawberry mocha specialty over ice',                 720, 288, '/drinks/strawberry-mocha.jpg',   74),
 
   -- Dessert
-  ('Tiramisu Affogato',    'Dessert',    'Tiramisu with hot espresso poured over',              650, 260, null,                             80),
-  ('Tiramisu in a Cup',    'Dessert',    'Classic tiramisu served in a cup',                    550, 220, null,                             81),
-  ('Brownie',              'Dessert',    'Warm chocolate brownie',                              450, 180, null,                             82);
+  ('Tiramisu Affogato',    'Dessert',    'Tiramisu with hot espresso poured over',              650, 260, '/drinks/tiramisu-affogato.jpg',  80),
+  ('Tiramisu in a Cup',    'Dessert',    'Classic tiramisu served in a cup',                    550, 220, '/drinks/tiramisu-cup.jpg',       81),
+  ('Brownie',              'Dessert',    'Warm chocolate brownie',                              450, 180, '/drinks/brownie.jpg',            82);
 
 -- ┌─────────────────────────────────────────────────────────┐
 -- │ 7. BACKFILL category_id on menu_items                   │

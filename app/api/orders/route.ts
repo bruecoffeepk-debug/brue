@@ -26,6 +26,7 @@ import { verifyTurnstileToken } from '@/lib/turnstile';
 import {
   SHOP,
   findDeliveryArea,
+  applyPromo,
   type DeliveryAreaId,
   type DeliveryMethodId,
 } from '@/lib/shop';
@@ -52,6 +53,7 @@ type IncomingPayload = {
   };
   notes?: string | null;
   items: IncomingItem[];
+  promo_code?: string | null; // server validates against PROMO_CODES
   cf_token?: string | null;   // Cloudflare Turnstile token from the client
 };
 
@@ -228,6 +230,15 @@ async function handleOrder(req: Request) {
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
 
+  // ── promo validation (server-trusted) ──
+  // The client preview is just UX; the source of truth is PROMO_CODES.
+  // applyPromo returns { discount: 0, promo: null } if the code is junk
+  // or for a different channel — silent ignore, no error.
+  const promoResult = applyPromo(subtotal, body.promo_code, 'web');
+  const discount = promoResult.discount;
+  const total = Math.max(0, subtotal - discount);
+  const promoCodeApplied = promoResult.promo?.code || null;
+
   // ── upsert customer (by phone) ──
   // Service role can SELECT; we no longer race-on-conflict.
   let customer_id: string | null = null;
@@ -277,8 +288,9 @@ async function handleOrder(req: Request) {
       delivery_distance_km: null,
       payment_method: 'unpaid',
       subtotal,
-      discount: 0,
-      total: subtotal,
+      discount,
+      total,
+      promo_code: promoCodeApplied,
       notes,
       status: 'pending',
       channel: 'web',

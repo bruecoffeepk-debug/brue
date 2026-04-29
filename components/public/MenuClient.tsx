@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Plus, Minus, X, ShoppingBag, MapPin, Loader2, Check, Lock, ChevronLeft, ChevronRight } from 'lucide-react';
 import { pkr, drinkPhotos } from '@/lib/utils';
 import type { Category, DrinkWithCategory } from '@/lib/utils';
-import { SHOP, deliverySummary } from '@/lib/shop';
+import { SHOP, deliverySummary, applyPromo } from '@/lib/shop';
 import { useZone } from '@/lib/zone-context';
 import { Turnstile } from './Turnstile';
 
@@ -348,10 +348,20 @@ function CheckoutDrawer({
   const [method, setMethod] = useState<string>(SHOP.delivery.methods[0].id);
   const [street, setStreet] = useState('');
   const [notes, setNotes] = useState('');
+  const [promoInput, setPromoInput] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [cfToken, setCfToken] = useState<string | null>(null);
+
+  // Live promo preview — server validates the code again before saving so we
+  // can be naive client-side. If the promo is invalid, applyPromo returns
+  // discount = 0 and we silently treat the input as junk.
+  const promoPreview = useMemo(
+    () => applyPromo(subtotal, promoInput, 'web'),
+    [subtotal, promoInput]
+  );
+  const total = Math.max(0, subtotal - promoPreview.discount);
   const [placed, setPlaced] = useState<{
     id: string;
     order_number: number;
@@ -384,6 +394,9 @@ function CheckoutDrawer({
               ? { method, area_id: zone.area.id, street }
               : undefined,
           notes,
+          // Promo code; server validates against PROMO_CODES and applies
+          // the discount. Client preview is naïve.
+          promo_code: promoInput.trim() || null,
           // Cloudflare Turnstile token. Server-side fail-open if Turnstile
           // isn't configured (no NEXT_PUBLIC_TURNSTILE_SITE_KEY → no widget,
           // no token, server skips verification).
@@ -438,10 +451,15 @@ function CheckoutDrawer({
       type === 'delivery' && zone.area
         ? `${zone.area.cluster} · ${zone.area.label} — ${street}`
         : '';
+    const promoLine = promoPreview.promo
+      ? `%0A${encodeURIComponent(promoPreview.promo.label)}: − ${pkr(promoPreview.discount)}`
+      : '';
     const body =
       `Hi BRUE 👋 — Order *#${placed.order_number}* for *${name}*` +
       `%0A%0A${lines}` +
-      `%0A%0ATotal: ${pkr(subtotal)}` +
+      `%0A%0ASubtotal: ${pkr(subtotal)}` +
+      promoLine +
+      `%0ATotal: ${pkr(total)}` +
       `%0AType: ${type}` +
       (type === 'delivery'
         ? `%0AMethod: ${SHOP.delivery.methods.find((m) => m.id === method)?.label}` +
@@ -739,11 +757,70 @@ function CheckoutDrawer({
               className="px-6 py-5 space-y-3"
               style={{ borderTop: '1px solid var(--line)' }}
             >
-              <div className="flex items-baseline justify-between">
-                <span className="eyebrow">Total</span>
-                <span className="serif" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>
-                  {pkr(subtotal)}
-                </span>
+              {/* ─── Promo code ─── */}
+              <div>
+                <label
+                  htmlFor="ck-promo"
+                  className="eyebrow"
+                  style={{ display: 'block', marginBottom: 6, color: 'var(--ink-muted)' }}
+                >
+                  Promo code (optional)
+                </label>
+                <div className="flex items-stretch gap-2">
+                  <input
+                    id="ck-promo"
+                    className="field"
+                    style={{ flex: 1, textTransform: 'uppercase', letterSpacing: '0.08em' }}
+                    placeholder="e.g. BRUE15"
+                    value={promoInput}
+                    onChange={(e) => setPromoInput(e.target.value)}
+                    autoCapitalize="characters"
+                    spellCheck={false}
+                    autoComplete="off"
+                  />
+                </div>
+                {promoInput.trim() && (
+                  <p
+                    className="mt-1.5"
+                    style={{
+                      fontSize: 12,
+                      color: promoPreview.promo ? 'var(--sage)' : 'var(--ink-muted)',
+                    }}
+                  >
+                    {promoPreview.promo
+                      ? `✓ ${promoPreview.promo.label} — ${pkr(promoPreview.discount)} off`
+                      : 'Code not recognised'}
+                  </p>
+                )}
+              </div>
+
+              {/* ─── Totals ─── */}
+              <div
+                className="space-y-1 pt-2"
+                style={{ borderTop: '1px dashed var(--line)' }}
+              >
+                <div className="flex items-baseline justify-between" style={{ fontSize: 13 }}>
+                  <span style={{ color: 'var(--ink-muted)' }}>Subtotal</span>
+                  <span className="serif" style={{ color: 'var(--ink-soft)' }}>
+                    {pkr(subtotal)}
+                  </span>
+                </div>
+                {promoPreview.discount > 0 && (
+                  <div className="flex items-baseline justify-between" style={{ fontSize: 13 }}>
+                    <span style={{ color: 'var(--sage)' }}>
+                      {promoPreview.promo?.label}
+                    </span>
+                    <span className="serif" style={{ color: 'var(--sage)' }}>
+                      − {pkr(promoPreview.discount)}
+                    </span>
+                  </div>
+                )}
+                <div className="flex items-baseline justify-between pt-2">
+                  <span className="eyebrow">Total</span>
+                  <span className="serif" style={{ fontSize: 28, letterSpacing: '-0.02em' }}>
+                    {pkr(total)}
+                  </span>
+                </div>
               </div>
 
               {/* Invisible Turnstile widget — only renders if NEXT_PUBLIC_TURNSTILE_SITE_KEY is set.

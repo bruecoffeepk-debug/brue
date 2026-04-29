@@ -1,6 +1,6 @@
 'use client';
 
-import { useTransition, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -14,9 +14,12 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import { pkr } from '@/lib/utils';
 import { setStatus, setPayment } from '@/app/(admin)/admin/orders/actions';
+import { createClient } from '@/lib/supabase/client';
 
 type Order = {
   id: string;
@@ -73,6 +76,120 @@ export default function OrdersClient({
   const [pending, start] = useTransition();
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Sound preference — persisted in localStorage so it survives reloads.
+  // Default ON: this is a kitchen / counter screen, you want the ping.
+  const [soundOn, setSoundOn] = useState<boolean>(true);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('brue.orders.soundOn');
+      if (saved === '0') setSoundOn(false);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem('brue.orders.soundOn', soundOn ? '1' : '0'); } catch {}
+  }, [soundOn]);
+
+  // Track which order ids we've already seen so we know what's "new".
+  // Initial baseline = the orders rendered on first server render.
+  const knownIdsRef = useRef<Set<string>>(new Set(orders.map((o) => o.id)));
+  const [newIds, setNewIds] = useState<Set<string>>(new Set());
+
+  // Re-baseline when orders prop changes (server refresh / status update from
+  // the same staff session). Don't drop newIds — those still need attention.
+  useEffect(() => {
+    for (const o of orders) knownIdsRef.current.add(o.id);
+  }, [orders]);
+
+  // Poll for new pending web orders every 12s. RLS allows authenticated full
+  // SELECT, so the staff session can read. If the staff is on a stable
+  // network this is well within Supabase's free tier limits (5 reads / min).
+  useEffect(() => {
+    const supabase = createClient();
+    let cancelled = false;
+
+    async function tick() {
+      try {
+        const { data, error } = await supabase
+          .from('orders')
+          .select('id, channel, status, created_at')
+          .eq('channel', 'web')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(20);
+        if (cancelled || error || !data) return;
+
+        const fresh = data.filter((o) => !knownIdsRef.current.has(o.id));
+        if (fresh.length === 0) return;
+
+        // Mark them known + new, then ask the server component for fresh data
+        // so the row actually appears in the list.
+        for (const o of fresh) knownIdsRef.current.add(o.id);
+        setNewIds((prev) => {
+          const next = new Set(prev);
+          for (const o of fresh) next.add(o.id);
+          return next;
+        });
+        if (soundOn) playOrderDing();
+        // Best-effort browser notification (silent if user hasn't allowed it).
+        if ('Notification' in window && Notification.permission === 'granted') {
+          new Notification('BRUE — new order', {
+            body: `${fresh.length} new web order${fresh.length > 1 ? 's' : ''}`,
+            icon: '/Brue_DP_Orange.png',
+            tag: 'brue-new-order', // collapses repeats
+          });
+        }
+        router.refresh();
+      } catch {
+        /* ignore — keep polling */
+      }
+    }
+
+    // Fire once immediately so the page picks up anything that landed while
+    // the staff was away from this tab.
+    tick();
+    const interval = setInterval(tick, 12_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [router, soundOn]);
+
+  // Ask for browser-notification permission on first user interaction (a
+  // click anywhere). Some browsers block prompting from inside an effect.
+  useEffect(() => {
+    if (!('Notification' in window)) return;
+    if (Notification.permission !== 'default') return;
+    const ask = () => {
+      Notification.requestPermission().catch(() => {});
+      window.removeEventListener('click', ask);
+    };
+    window.addEventListener('click', ask, { once: true });
+    return () => window.removeEventListener('click', ask);
+  }, []);
+
+  function dismissNew(id: string) {
+    setNewIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+  }
+  function dismissAllNew() {
+    setNewIds(new Set());
+  }
+  function scrollToFirstNew() {
+    const firstId = orders.find((o) => newIds.has(o.id))?.id;
+    if (!firstId) return;
+    const el = document.getElementById(`order-${firstId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      // After 2s, give it the dismissed flicker so staff knows it's been seen.
+      setTimeout(() => dismissNew(firstId), 2000);
+    }
+  }
+
+  const newCount = newIds.size;
+
   function advance(o: Order) {
     const flow = STATUS_FLOW[o.status];
     if (!flow) return;
@@ -98,24 +215,108 @@ export default function OrdersClient({
     });
   }
 
+  // Bell toggle is rendered even when there are no orders, so the staff can
+  // pre-toggle sound off before the rush.
+  const SoundToggle = (
+    <button
+      onClick={() => setSoundOn((v) => !v)}
+      title={soundOn ? 'Sound on — click to mute' : 'Sound off — click to unmute'}
+      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+      style={{
+        background: soundOn ? 'rgba(107,122,83,0.12)' : 'rgba(28,23,18,0.06)',
+        color: soundOn ? 'var(--sage)' : 'var(--ink-muted)',
+        border: `1px solid ${soundOn ? 'rgba(107,122,83,0.32)' : 'var(--line)'}`,
+        fontSize: 11,
+        letterSpacing: '0.16em',
+        textTransform: 'uppercase',
+        fontWeight: 500,
+      }}
+    >
+      {soundOn ? <Bell size={11} /> : <BellOff size={11} />}
+      Sound {soundOn ? 'on' : 'off'}
+    </button>
+  );
+
+  // Floating "N new" bubble — sticky at the top, click to scroll to first new.
+  const NewBubble = newCount > 0 && (
+    <div
+      className="sticky z-30 flex justify-center mb-3"
+      style={{ top: 12, pointerEvents: 'none' }}
+    >
+      <div
+        className="inline-flex items-center gap-3 pl-4 pr-2 py-2 rounded-full"
+        style={{
+          background: 'var(--terra)',
+          color: 'var(--bone)',
+          boxShadow: '0 14px 36px -14px rgba(196,69,38,0.55)',
+          pointerEvents: 'auto',
+          animation: 'brue-pulse 1.4s ease-in-out infinite',
+        }}
+      >
+        <span className="relative inline-flex" style={{ width: 14, height: 14 }}>
+          <span
+            style={{
+              position: 'absolute', inset: 0, borderRadius: 999,
+              background: 'rgba(252,247,235,0.4)',
+              animation: 'brue-ring 1.6s ease-out infinite',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute', top: 4, left: 4, width: 6, height: 6,
+              borderRadius: 999, background: 'var(--bone)',
+            }}
+          />
+        </span>
+        <button
+          onClick={scrollToFirstNew}
+          className="text-[12px] font-semibold tracking-wide"
+          style={{ color: 'inherit' }}
+        >
+          {newCount} new web order{newCount > 1 ? 's' : ''} · jump
+        </button>
+        <button
+          onClick={dismissAllNew}
+          aria-label="Dismiss"
+          className="inline-flex items-center justify-center"
+          style={{
+            width: 26, height: 26, borderRadius: 999,
+            background: 'rgba(252,247,235,0.18)',
+          }}
+        >
+          <X size={12} />
+        </button>
+      </div>
+    </div>
+  );
+
   if (orders.length === 0) {
     return (
-      <div
-        className="text-center py-20 rounded-xl"
-        style={{ background: 'var(--paper)', border: '1px dashed var(--line-strong)' }}
-      >
-        <p className="serif italic" style={{ fontSize: 22, color: 'var(--ink-soft)' }}>
-          No orders here yet.
-        </p>
-        <p className="mt-2" style={{ color: 'var(--ink-muted)', fontSize: 13 }}>
-          When a customer places an order on /menu, it lands here.
-        </p>
-      </div>
+      <>
+        <style>{BUBBLE_KEYFRAMES}</style>
+        <div className="flex justify-end mb-3">{SoundToggle}</div>
+        <div
+          className="text-center py-20 rounded-xl"
+          style={{ background: 'var(--paper)', border: '1px dashed var(--line-strong)' }}
+        >
+          <p className="serif italic" style={{ fontSize: 22, color: 'var(--ink-soft)' }}>
+            No orders here yet.
+          </p>
+          <p className="mt-2" style={{ color: 'var(--ink-muted)', fontSize: 13 }}>
+            When a customer places an order on /menu, it lands here. You&apos;ll
+            hear a ding when one arrives.
+          </p>
+        </div>
+      </>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <>
+      <style>{BUBBLE_KEYFRAMES}</style>
+      <div className="flex justify-end mb-3">{SoundToggle}</div>
+      {NewBubble}
+      <div className="space-y-3">
       {orders.map((o) => {
         const meta = STATUS_META[o.status] ?? STATUS_META.pending;
         const Icon = meta.icon;
@@ -124,16 +325,21 @@ export default function OrdersClient({
         const isOpen = expanded === o.id;
         const placedAt = new Date(o.created_at);
         const age = minutesAgo(placedAt);
+        const isNew = newIds.has(o.id);
 
         return (
           <div
             key={o.id}
+            id={`order-${o.id}`}
+            onClick={() => isNew && dismissNew(o.id)}
             className="relative overflow-hidden"
             style={{
               background: 'var(--bone)',
-              border: '1px solid var(--line)',
+              border: isNew ? '2px solid var(--terra)' : '1px solid var(--line)',
               borderLeft: `4px solid ${meta.color}`,
               borderRadius: 14,
+              boxShadow: isNew ? '0 0 0 4px rgba(196,69,38,0.18)' : undefined,
+              animation: isNew ? 'brue-new-row 1.6s ease-in-out infinite' : undefined,
             }}
           >
             {/* Main row */}
@@ -316,11 +522,57 @@ export default function OrdersClient({
           </div>
         );
       })}
-    </div>
+      </div>
+    </>
   );
 }
 
 /* ─────────────────────────── helpers ─────────────────────────── */
+
+/** Pleasant two-note ascending ding via Web Audio. No mp3 file needed.
+ *  Browser autoplay policy: silent until the user has interacted with the
+ *  page once. After that, all subsequent dings work. */
+function playOrderDing() {
+  try {
+    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [880, 1320].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = freq;
+      osc.type = 'sine';
+      const start = ctx.currentTime + i * 0.13;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
+      osc.start(start);
+      osc.stop(start + 0.5);
+    });
+    // Close the context after a beat so we don't leak audio nodes.
+    setTimeout(() => ctx.close().catch(() => {}), 800);
+  } catch {
+    /* AudioContext blocked or unavailable — silent fallback */
+  }
+}
+
+const BUBBLE_KEYFRAMES = `
+@keyframes brue-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 14px 36px -14px rgba(196,69,38,0.55); }
+  50% { transform: scale(1.02); box-shadow: 0 18px 44px -14px rgba(196,69,38,0.7); }
+}
+@keyframes brue-ring {
+  0% { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+@keyframes brue-new-row {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(196,69,38,0.18); }
+  50% { box-shadow: 0 0 0 8px rgba(196,69,38,0.28); }
+}
+`;
+
 
 function InfoLine({ label, value, copy }: { label: string; value: string; copy?: boolean }) {
   async function doCopy() {

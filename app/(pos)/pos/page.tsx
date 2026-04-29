@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { Minus, Plus, Search, Trash2, User, X } from 'lucide-react';
+import { Minus, Plus, Search, Trash2, User, X, EyeOff, Eye } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import {
@@ -17,6 +17,7 @@ import {
   type Customer,
   type MenuItem,
 } from '@/lib/utils';
+import { applyPromo } from '@/lib/shop';
 
 export default function PosPage() {
   const router = useRouter();
@@ -34,6 +35,7 @@ export default function PosPage() {
   const [orderType, setOrderType] = useState<(typeof ORDER_TYPES)[number]>('Pickup');
   const [payment, setPayment] = useState<string>('Cash');
   const [notes, setNotes] = useState('');
+  const [promoCode, setPromoCode] = useState('');
   const [showCustomers, setShowCustomers] = useState(false);
   const [busy, setBusy] = useState(false);
   const [posErr, setPosErr] = useState<string | null>(null);
@@ -54,8 +56,14 @@ export default function PosPage() {
   const discountPct = customer?.discount_percent ?? 0;
 
   const subtotal = cart.reduce((s, l) => s + l.price * l.quantity, 0);
-  const discount = Math.round((subtotal * discountPct) / 100);
-  const total = subtotal - discount;
+  const customerDiscount = Math.round((subtotal * discountPct) / 100);
+  // POS-side promo: same applyPromo() server-side validation logic. Computed
+  // client-side here is fine — the cashier is authenticated, no anti-fraud
+  // concern.
+  const promoResult = applyPromo(subtotal, promoCode, 'pos');
+  const promoDiscount = promoResult.discount;
+  const discount = customerDiscount + promoDiscount;
+  const total = Math.max(0, subtotal - discount);
 
   const filtered = useMemo(() => {
     let out = items;
@@ -68,6 +76,13 @@ export default function PosPage() {
   }, [items, cat, q]);
 
   const addToCart = (item: MenuItem) => {
+    if (!item.in_stock) {
+      // Cashier tapped a sold-out item; let them know to toggle stock first
+      // rather than silently doing nothing.
+      setPosErr(`${item.name} is marked sold out — tap the eye icon to bring it back.`);
+      return;
+    }
+    setPosErr(null);
     setCart((prev) => {
       const ex = prev.find((l) => l.id === item.id);
       if (ex) return prev.map((l) => (l.id === item.id ? { ...l, quantity: l.quantity + 1 } : l));
@@ -92,6 +107,24 @@ export default function PosPage() {
 
   const removeLine = (id: string) => setCart((prev) => prev.filter((l) => l.id !== id));
 
+  /** Flip the in_stock flag and refresh the catalog. Optimistic update so the
+   *  UI feels instant; rolls back if Supabase rejects. */
+  const toggleStock = async (item: MenuItem) => {
+    const next = !item.in_stock;
+    // Optimistic
+    setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, in_stock: next } : i)));
+    const { error } = await supabase
+      .from('menu_items')
+      .update({ in_stock: next })
+      .eq('id', item.id);
+    if (error) {
+      console.error('[pos] toggleStock failed', error);
+      // Rollback
+      setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, in_stock: item.in_stock } : i)));
+      alert(`Couldn't toggle stock: ${error.message || 'unknown error'}`);
+    }
+  };
+
   const placeOrder = async () => {
     if (cart.length === 0 || busy) return;
     setBusy(true);
@@ -108,6 +141,7 @@ export default function PosPage() {
           subtotal,
           discount,
           total,
+          promo_code: promoResult.promo?.code || null,
           notes: notes || null,
           status: 'completed',
           channel: 'pos',
@@ -184,26 +218,66 @@ export default function PosPage() {
           <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
             {filtered.map((item) => {
               const photo = item.photo ?? DRINK_PHOTO[item.name] ?? null;
+              const sold = !item.in_stock;
               return (
-                <button
-                  key={item.id}
-                  onClick={() => addToCart(item)}
-                  className="bg-cream rounded-2xl border-[1.5px] border-charcoal/10 overflow-hidden text-left hover:border-terracotta hover:shadow-lg transition active:scale-95"
-                >
-                  <div className="aspect-square bg-deep-sand relative overflow-hidden">
-                    {photo ? (
-                      <Image src={photo} alt={item.name} fill className="object-cover" />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center">
-                        <Image src="/Brue_DP_Orange.png" alt="" width={80} height={26} className="opacity-40" />
-                      </div>
-                    )}
-                  </div>
-                  <div className="p-3">
-                    <p className="h-display text-lg leading-tight line-clamp-2">{item.name}</p>
-                    <p className="text-terracotta font-semibold text-sm mt-1">{pkr(item.price)}</p>
-                  </div>
-                </button>
+                <div key={item.id} className="relative group">
+                  <button
+                    type="button"
+                    onClick={() => addToCart(item)}
+                    className="block w-full bg-cream rounded-2xl border-[1.5px] border-charcoal/10 overflow-hidden text-left hover:border-terracotta hover:shadow-lg transition active:scale-95"
+                    style={{ opacity: sold ? 0.55 : 1 }}
+                  >
+                    <div className="aspect-square bg-deep-sand relative overflow-hidden">
+                      {photo ? (
+                        <Image src={photo} alt={item.name} fill className="object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <Image src="/Brue_DP_Orange.png" alt="" width={80} height={26} className="opacity-40" />
+                        </div>
+                      )}
+                      {sold && (
+                        <span
+                          className="absolute top-2 left-2 z-[2]"
+                          style={{
+                            fontSize: 9, letterSpacing: '0.18em', textTransform: 'uppercase',
+                            background: '#1c1712', color: '#fcf7eb',
+                            padding: '4px 8px', borderRadius: 999, fontWeight: 600,
+                          }}
+                        >
+                          Sold out
+                        </span>
+                      )}
+                    </div>
+                    <div className="p-3">
+                      <p className="h-display text-lg leading-tight line-clamp-2">{item.name}</p>
+                      <p className="text-terracotta font-semibold text-sm mt-1">{pkr(item.price)}</p>
+                    </div>
+                  </button>
+                  {/* Stock toggle — small icon, top-right of card. Stops click
+                      propagation so it doesn't add to cart. */}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleStock(item);
+                    }}
+                    aria-label={sold ? `Mark ${item.name} as available` : `Mark ${item.name} sold out`}
+                    title={sold ? 'Bring back in stock' : 'Mark sold out'}
+                    className="absolute top-2 right-2 inline-flex items-center justify-center transition"
+                    style={{
+                      width: 32, height: 32, borderRadius: 999,
+                      background: sold ? '#c44526' : 'rgba(252,247,235,0.95)',
+                      color: sold ? '#fcf7eb' : '#1c1712',
+                      border: '1px solid rgba(28,23,18,0.12)',
+                      backdropFilter: 'blur(6px)',
+                      boxShadow: '0 6px 16px -8px rgba(28,23,18,0.35)',
+                      // visible always on touch devices, fade in on hover for desktop
+                      opacity: 1,
+                    }}
+                  >
+                    {sold ? <Eye size={14} /> : <EyeOff size={14} />}
+                  </button>
+                </div>
               );
             })}
           </div>
@@ -315,14 +389,42 @@ export default function PosPage() {
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
           />
+
+          <div>
+            <input
+              className="field !py-2 !text-sm"
+              placeholder="Promo code (e.g. BRUE15)"
+              value={promoCode}
+              onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+              autoCapitalize="characters"
+              spellCheck={false}
+              autoComplete="off"
+              style={{ letterSpacing: '0.05em' }}
+            />
+            {promoCode.trim() && (
+              <p
+                className="mt-1 text-xs"
+                style={{ color: promoResult.promo ? 'var(--sage, #6b7a53)' : '#9a3419' }}
+              >
+                {promoResult.promo
+                  ? `✓ ${promoResult.promo.label}`
+                  : 'Code not recognised'}
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Totals */}
         <div className="mt-4 space-y-1 text-sm">
           <div className="flex justify-between"><span className="text-charcoal/60">Subtotal</span><span>{pkr(subtotal)}</span></div>
-          {discount > 0 && (
+          {customerDiscount > 0 && (
             <div className="flex justify-between text-sage">
-              <span>Discount ({discountPct}%)</span><span>−{pkr(discount)}</span>
+              <span>Member ({discountPct}%)</span><span>−{pkr(customerDiscount)}</span>
+            </div>
+          )}
+          {promoDiscount > 0 && promoResult.promo && (
+            <div className="flex justify-between text-sage">
+              <span>{promoResult.promo.label}</span><span>−{pkr(promoDiscount)}</span>
             </div>
           )}
           <div className="dotted-rule my-2 text-charcoal" />

@@ -123,3 +123,51 @@ export function deliverySummary(): string {
   const clusters = deliveryAreaClusters();
   return `${clusters.map((c) => c.cluster).join(' + ')} · ${SHOP.delivery.areas.length} blocks`;
 }
+
+// ─── PROMO CODES ─────────────────────────────────────────────
+// Hard-coded for now — small set, easy to manage, server validates against
+// this same list so the client can't fake a code. To add codes later, just
+// drop a new entry here. To disable, set active: false.
+
+export type PromoCode = {
+  code: string;          // canonical uppercase code
+  label: string;         // shown on receipt + admin
+  discountPct: number;   // 0–100
+  active: boolean;
+  channel?: 'web' | 'pos' | 'both'; // where it's redeemable
+};
+
+export const PROMO_CODES: PromoCode[] = [
+  {
+    code: 'BRUE15',
+    label: '15% off — BRUE15',
+    discountPct: 15,
+    active: true,
+    channel: 'both',
+  },
+];
+
+/** Look up a promo by code (case-insensitive). Returns undefined if invalid
+ *  or inactive. Caller still has to honour the channel restriction. */
+export function findPromoCode(raw: string | null | undefined): PromoCode | undefined {
+  if (!raw) return undefined;
+  const code = raw.trim().toUpperCase();
+  return PROMO_CODES.find((p) => p.code === code && p.active);
+}
+
+/** Compute the line-item discount for a subtotal given a promo code. Returns
+ *  { discount, label } or { discount: 0 } if the code is missing/invalid for
+ *  this channel. */
+export function applyPromo(
+  subtotal: number,
+  rawCode: string | null | undefined,
+  channel: 'web' | 'pos'
+): { discount: number; promo: PromoCode | null } {
+  const promo = findPromoCode(rawCode);
+  if (!promo) return { discount: 0, promo: null };
+  if (promo.channel && promo.channel !== 'both' && promo.channel !== channel) {
+    return { discount: 0, promo: null };
+  }
+  const discount = Math.max(0, Math.round((subtotal * promo.discountPct) / 100));
+  return { discount, promo };
+}

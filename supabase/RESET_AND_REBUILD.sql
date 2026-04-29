@@ -79,7 +79,9 @@ create table orders (
   accepted_at timestamptz,
   ready_at timestamptz,
   out_for_delivery_at timestamptz,
-  completed_at timestamptz
+  completed_at timestamptz,
+  -- from migration 009
+  promo_code text
 );
 
 create table order_items (

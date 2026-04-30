@@ -1,44 +1,57 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { createClient } from '@/lib/supabase/server';
-import { pkr } from '@/lib/utils';
 import type { DrinkWithCategory } from '@/lib/utils';
 import FlowerField from '@/components/brand/FlowerField';
 import Flower from '@/components/brand/Flower';
+import DrinkCard from '@/components/public/DrinkCard';
 
 // Debug: force-dynamic so every request hits Supabase fresh. Swap back to
 // `export const revalidate = 60` for ISR once stable.
 export const dynamic = 'force-dynamic';
 
-async function getFeatured(): Promise<DrinkWithCategory[]> {
+/**
+ * Fetch the four "row" datasets the homepage displays:
+ *   - specials : top 8 drinks across non-Dessert / non-New Recipe categories
+ *                (the "trending / hot" list — owner can later replace with a
+ *                proper `featured` flag on menu_items)
+ *   - desserts : every active Dessert
+ *   - newRecipes : every active New Recipe
+ *   - all      : just for the sort-by-price-asc + count
+ *
+ * One round trip — a single SELECT pulls every visible drink, then we slice
+ * client-side. Cheaper than 4 separate queries.
+ */
+async function getHomeData() {
   const supabase = createClient();
-  // menu_items_public excludes `cost` so margin doesn't leak to the browser.
   const { data } = await supabase
     .from('menu_items_public')
     .select('*, categories ( id, name, slug, emoji )')
-    .order('sort_order', { ascending: true })
-    .limit(8);
-  return (data ?? []) as any;
-}
+    .order('sort_order', { ascending: true });
 
-async function getStats() {
-  const supabase = createClient();
-  const [{ count: drinks }, { data: cheapest }] = await Promise.all([
-    supabase.from('menu_items_public').select('*', { count: 'exact', head: true }),
-    supabase
-      .from('menu_items_public')
-      .select('price')
-      .order('price', { ascending: true })
-      .limit(1),
-  ]);
+  const all = (data ?? []) as DrinkWithCategory[];
+  const desserts = all.filter((d) => d.category === 'Dessert');
+  const newRecipes = all.filter((d) => d.category === 'New Recipe');
+  const specials = all
+    .filter((d) => d.category !== 'Dessert' && d.category !== 'New Recipe')
+    .slice(0, 8);
+  const startingFrom = all.length
+    ? all.reduce((m, d) => Math.min(m, d.price), Infinity)
+    : 540;
   return {
-    drinks: drinks ?? 0,
-    startingFrom: cheapest?.[0]?.price ?? 540,
+    specials,
+    desserts,
+    newRecipes,
+    drinkCount: all.length,
+    startingFrom,
   };
 }
 
 export default async function HomePage() {
-  const [featured, stats] = await Promise.all([getFeatured(), getStats()]);
+  const { specials, desserts, newRecipes, drinkCount, startingFrom } =
+    await getHomeData();
+  const featured = specials;
+  const stats = { drinks: drinkCount, startingFrom };
 
   return (
     <>
@@ -120,14 +133,14 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {/* ─── FEATURED DRINKS ─────────────────────────────── */}
-      <section className="grain" style={{ background: 'var(--paper)', padding: '90px 0 110px' }}>
+      {/* ─── SPECIALS / TODAY'S HOT ─────────────────────── */}
+      <section className="grain" style={{ background: 'var(--paper)', padding: '90px 0 50px' }}>
         <div className="relative z-[2] max-w-[1400px] mx-auto px-7 lg:px-10">
           <div className="flex items-end justify-between gap-8 mb-12 flex-wrap">
             <div>
               <span className="chip">
                 <span className="dot" />
-                The Line-up · {stats.drinks} drinks
+                Today&apos;s specials · trending
               </span>
               <h2 className="display mt-5" style={{ fontSize: 'clamp(2.8rem, 5.6vw, 5rem)' }}>
                 What&apos;s <span className="ital">brewing</span>
@@ -138,7 +151,7 @@ export default async function HomePage() {
             <div className="max-w-md">
               <p style={{ color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}>
                 Espresso classics, blended frappés, iced teas, fresh lemonades — and the cold brew
-                flight that put us on the map.
+                flight that put us on the map. Tap a card to add — straight to your cart.
               </p>
               <span
                 className="script mt-3 inline-block"
@@ -149,30 +162,90 @@ export default async function HomePage() {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-x-6 gap-y-10 grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {featured.map((d) => (
-              <FeatureCard key={d.id} drink={d} />
+              <DrinkCard key={d.id} drink={d} />
             ))}
-          </div>
-
-          <div className="flex justify-center items-center gap-6 flex-wrap mt-14">
-            <Link href="/menu" className="btn btn-primary">
-              Full Menu — {stats.drinks} Drinks <span className="arrow">↗</span>
-            </Link>
-            <span
-              className="script"
-              style={{
-                fontSize: 22,
-                color: 'var(--terra)',
-                transform: 'rotate(-2deg)',
-                display: 'inline-block',
-              }}
-            >
-              FB area + north nazimabad · bykea · indrive · whatsapp
-            </span>
           </div>
         </div>
       </section>
+
+      {/* ─── NEW RECIPES ────────────────────────────────── */}
+      {newRecipes.length > 0 && (
+        <section style={{ background: 'var(--paper)', padding: '40px 0' }}>
+          <div className="relative z-[2] max-w-[1400px] mx-auto px-7 lg:px-10">
+            <div className="flex items-end justify-between gap-8 mb-10 flex-wrap">
+              <div>
+                <span className="chip">
+                  <span className="dot" style={{ background: 'var(--mustard)' }} />
+                  Just dropped
+                </span>
+                <h2 className="display mt-5" style={{ fontSize: 'clamp(2.4rem, 4.6vw, 4rem)' }}>
+                  New <span className="ital">recipes</span>.
+                </h2>
+              </div>
+              <p
+                className="max-w-sm"
+                style={{ color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}
+              >
+                Tested behind the bar this month. Try them before they hit the regular line-up.
+              </p>
+            </div>
+            <div className="grid gap-x-6 gap-y-10 grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
+              {newRecipes.map((d) => (
+                <DrinkCard key={d.id} drink={d} />
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ─── DESSERTS ───────────────────────────────────── */}
+      {desserts.length > 0 && (
+        <section style={{ background: 'var(--paper)', padding: '40px 0 110px' }}>
+          <div className="relative z-[2] max-w-[1400px] mx-auto px-7 lg:px-10">
+            <div className="flex items-end justify-between gap-8 mb-10 flex-wrap">
+              <div>
+                <span className="chip">
+                  <span className="dot" style={{ background: 'var(--sage)' }} />
+                  After the brew
+                </span>
+                <h2 className="display mt-5" style={{ fontSize: 'clamp(2.4rem, 4.6vw, 4rem)' }}>
+                  Sweet <span className="ital">things</span>.
+                </h2>
+              </div>
+              <p
+                className="max-w-sm"
+                style={{ color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}
+              >
+                Tiramisu in a cup, the affogato, a fudgy brownie. Pair them with anything cold.
+              </p>
+            </div>
+            <div className="grid gap-x-6 gap-y-10 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {desserts.map((d) => (
+                <DrinkCard key={d.id} drink={d} />
+              ))}
+            </div>
+
+            <div className="flex justify-center items-center gap-6 flex-wrap mt-14">
+              <Link href="/menu" className="btn btn-primary">
+                Full Menu — {stats.drinks} Drinks <span className="arrow">↗</span>
+              </Link>
+              <span
+                className="script"
+                style={{
+                  fontSize: 22,
+                  color: 'var(--terra)',
+                  transform: 'rotate(-2deg)',
+                  display: 'inline-block',
+                }}
+              >
+                FB area + north nazimabad · bykea · indrive · whatsapp
+              </span>
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ─── THE CRAFT · GROUND TO ORDER ─────────────────── */}
       <section
@@ -481,86 +554,6 @@ function OrderCard({
         {body}
       </p>
     </div>
-  );
-}
-
-function FeatureCard({ drink }: { drink: DrinkWithCategory }) {
-  const sold = !drink.in_stock;
-  const photo = drink.photo || '/Brue_DP_Orange.png';
-  return (
-    <Link
-      href={`/menu#${drink.id}`}
-      className="group block"
-      style={{ opacity: sold ? 0.7 : 1 }}
-    >
-      <div
-        className="relative overflow-hidden grain"
-        style={{
-          aspectRatio: '4 / 5',
-          borderRadius: 14,
-          background: 'var(--cream)',
-          boxShadow: '0 24px 60px -28px rgba(28,23,18,0.25)',
-        }}
-      >
-        <Image
-          src={photo}
-          alt={drink.name}
-          fill
-          sizes="(max-width: 768px) 50vw, 25vw"
-          className="object-cover transition-transform duration-700 group-hover:scale-105"
-        />
-        {drink.categories && (
-          <span
-            className="absolute top-3 left-3 z-[2]"
-            style={{
-              fontSize: 10,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              background: 'var(--bone)',
-              color: 'var(--ink)',
-              padding: '5px 10px',
-              borderRadius: 999,
-              fontWeight: 500,
-            }}
-          >
-            {drink.categories.name}
-          </span>
-        )}
-        {sold && (
-          <span
-            className="absolute top-3 right-3 z-[2]"
-            style={{
-              fontSize: 10,
-              letterSpacing: '0.18em',
-              textTransform: 'uppercase',
-              background: 'var(--ink)',
-              color: 'var(--bone)',
-              padding: '5px 10px',
-              borderRadius: 999,
-              fontWeight: 500,
-            }}
-          >
-            Sold out
-          </span>
-        )}
-      </div>
-      <div className="flex items-baseline justify-between mt-4">
-        <h3 className="serif" style={{ fontSize: 20, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
-          {drink.name}
-        </h3>
-        <span
-          className="serif"
-          style={{ fontSize: 16, color: 'var(--ink-soft)', letterSpacing: '-0.02em' }}
-        >
-          {pkr(drink.price)}
-        </span>
-      </div>
-      {drink.description && (
-        <p className="mt-1" style={{ color: 'var(--ink-muted)', fontSize: 13, lineHeight: 1.5 }}>
-          {drink.description}
-        </p>
-      )}
-    </Link>
   );
 }
 

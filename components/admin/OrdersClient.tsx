@@ -117,25 +117,36 @@ export default function OrdersClient({
     }
   }
 
-  /** Play the two-note ding using the shared, already-unlocked context. */
+  /** Play a loud, attention-grabbing 3-note rising chime. Higher freqs +
+   *  square wave + bigger gain than the original ding so it cuts through
+   *  cafe noise. Plays it TWICE in quick succession for extra emphasis. */
   function playDing() {
     const ctx = audioCtxRef.current;
     if (!ctx || ctx.state !== 'running') return;
     try {
-      [880, 1320].forEach((freq, i) => {
+      const notes = [
+        { freq: 1200, start: 0.00, dur: 0.14, peak: 0.5  },
+        { freq: 1600, start: 0.13, dur: 0.14, peak: 0.55 },
+        { freq: 2200, start: 0.26, dur: 0.32, peak: 0.6  },
+        // Pause, then repeat — a "ding-ding" not a single ding
+        { freq: 1200, start: 0.75, dur: 0.14, peak: 0.5  },
+        { freq: 1600, start: 0.88, dur: 0.14, peak: 0.55 },
+        { freq: 2200, start: 1.01, dur: 0.32, peak: 0.6  },
+      ];
+      for (const n of notes) {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.value = n.freq;
         osc.connect(gain);
         gain.connect(ctx.destination);
-        osc.frequency.value = freq;
-        osc.type = 'sine';
-        const start = ctx.currentTime + i * 0.13;
-        gain.gain.setValueAtTime(0, start);
-        gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
-        osc.start(start);
-        osc.stop(start + 0.5);
-      });
+        const t0 = ctx.currentTime + n.start;
+        gain.gain.setValueAtTime(0, t0);
+        gain.gain.linearRampToValueAtTime(n.peak, t0 + 0.01);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + n.dur);
+        osc.start(t0);
+        osc.stop(t0 + n.dur + 0.05);
+      }
     } catch {
       /* ignore — context might have closed */
     }

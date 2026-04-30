@@ -124,6 +124,82 @@ export function deliverySummary(): string {
   return `${clusters.map((c) => c.cluster).join(' + ')} · ${SHOP.delivery.areas.length} blocks`;
 }
 
+// ─── PAYMENT OPTIONS (web checkout) ──────────────────────────
+// Customer picks one of these on the checkout's payment step. We don't
+// process payments online — staff verify in their own JazzCash/SadaPay
+// /Faysal app before accepting the order in /admin/orders.
+//
+// Cash on delivery is intentionally NOT here for the web flow.
+
+export type PaymentOption = {
+  id: string;             // stored in orders.payment_method
+  label: string;          // shown on the picker
+  kind: 'bank' | 'fintech';
+  emoji?: string;
+  // Account details, all displayed with copy buttons
+  accountName: string;
+  accountNumber: string;  // IBAN for bank, mobile number for fintech
+  accountNumberLabel?: string; // "IBAN", "Mobile number", etc.
+  bankName?: string;
+  branch?: string;
+  // QR image path under /public/payment/. If undefined, no QR shown.
+  qrImage?: string;
+  // Short instructions shown above the details
+  note?: string;
+};
+
+export const PAYMENT_OPTIONS: PaymentOption[] = [
+  {
+    id: 'faysal-bank',
+    label: 'Faysal Bank — IBFT',
+    kind: 'bank',
+    emoji: '🏦',
+    accountName: 'BRUE COFFEE STUDIO',
+    accountNumber: 'PK03FAYS3066301000007502',
+    accountNumberLabel: 'IBAN',
+    bankName: 'Faysal Bank',
+    branch: 'IBB Ayesha Manzil, Karachi',
+    qrImage: '/payment/faysal-bank-qr.jpg',
+    note: 'Scan with any banking app or transfer via IBFT.',
+  },
+  {
+    id: 'nayapay',
+    label: 'NayaPay',
+    kind: 'fintech',
+    emoji: '💳',
+    accountName: 'BRUE COFFEE STUDIO',
+    accountNumber: '03347639801',
+    accountNumberLabel: 'NayaPay number',
+    note: 'Send via the NayaPay app to the number above.',
+  },
+  {
+    id: 'sadapay',
+    label: 'SadaPay',
+    kind: 'fintech',
+    emoji: '💸',
+    accountName: 'BRUE COFFEE STUDIO',
+    accountNumber: '03347639801',
+    accountNumberLabel: 'SadaPay number',
+    note: 'Send via the SadaPay app to the number above.',
+  },
+  {
+    id: 'jazzcash',
+    label: 'JazzCash',
+    kind: 'fintech',
+    emoji: '📱',
+    accountName: 'BRUE COFFEE STUDIO',
+    accountNumber: '03347639801',
+    accountNumberLabel: 'JazzCash number',
+    note: 'Send via the JazzCash app to the number above.',
+  },
+];
+
+/** Find a payment option by id. Returns undefined if invalid. */
+export function findPaymentOption(id: string | null | undefined): PaymentOption | undefined {
+  if (!id) return undefined;
+  return PAYMENT_OPTIONS.find((p) => p.id === id);
+}
+
 // ─── PROMO CODES ─────────────────────────────────────────────
 // Hard-coded for now — small set, easy to manage, server validates against
 // this same list so the client can't fake a code. To add codes later, just

@@ -13,9 +13,9 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { Check, Clock, Loader2, Minus, Plus, X } from 'lucide-react';
+import { ArrowRight, Check, Clock, Copy, Loader2, Minus, Plus, X } from 'lucide-react';
 import { pkr } from '@/lib/utils';
-import { SHOP, applyPromo } from '@/lib/shop';
+import { SHOP, PAYMENT_OPTIONS, applyPromo, findPaymentOption, type PaymentOption } from '@/lib/shop';
 import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
 import { isOpenNow, statusLabel } from '@/lib/hours';
@@ -38,7 +38,7 @@ function useShopOpen() {
   return { open, label };
 }
 
-type Step = 'cart' | 'details' | 'placed';
+type Step = 'cart' | 'details' | 'payment' | 'placed';
 
 export default function CheckoutDrawer() {
   const { cart, cartOpen, closeCart, changeQty, subtotal, clearCart } = useCart();
@@ -56,6 +56,7 @@ export default function CheckoutDrawer() {
   const [notes, setNotes] = useState('');
   const [promoInput, setPromoInput] = useState('');
 
+  const [paymentId, setPaymentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [cfToken, setCfToken] = useState<string | null>(null);
@@ -89,6 +90,7 @@ export default function CheckoutDrawer() {
       if (!zone.area) return setSubmitErr('Pick a delivery area first');
       if (!street.trim()) return setSubmitErr('Add your street / house detail');
     }
+    if (!paymentId) return setSubmitErr('Pick a payment method');
 
     setSubmitting(true);
     try {
@@ -104,6 +106,7 @@ export default function CheckoutDrawer() {
               : undefined,
           notes,
           promo_code: promoInput.trim() || null,
+          payment_method: paymentId,
           cf_token: cfToken,
           items: cart.map((l) => ({
             id: l.id,
@@ -206,7 +209,12 @@ export default function CheckoutDrawer() {
             )}
             {step === 'details' && (
               <>
-                Almost <span className="ital">there</span>
+                Your <span className="ital">details</span>
+              </>
+            )}
+            {step === 'payment' && (
+              <>
+                <span className="ital">Pay</span> & confirm
               </>
             )}
             {step === 'placed' && (
@@ -604,8 +612,6 @@ export default function CheckoutDrawer() {
                 </div>
               </div>
 
-              <Turnstile onToken={setCfToken} />
-
               {!shop.open && (
                 <div
                   className="rounded-xl p-3 flex items-start gap-2.5"
@@ -634,25 +640,31 @@ export default function CheckoutDrawer() {
                   ← Cart
                 </button>
                 <button
-                  onClick={placeOrder}
-                  disabled={submitting || needsArea || !shop.open}
+                  onClick={() => {
+                    // Validate details before going to the payment step
+                    setSubmitErr(null);
+                    if (!name.trim()) return setSubmitErr('Add your name');
+                    if (!phone.trim()) return setSubmitErr('Add your WhatsApp number');
+                    if (type === 'delivery') {
+                      if (!zone.area) return setSubmitErr('Pick a delivery area first');
+                      if (!street.trim()) return setSubmitErr('Add your street / house detail');
+                    }
+                    setStep('payment');
+                  }}
+                  disabled={needsArea || !shop.open}
                   className="btn btn-terra"
                   style={{
                     flex: 1,
-                    opacity: submitting || needsArea || !shop.open ? 0.6 : 1,
+                    opacity: needsArea || !shop.open ? 0.6 : 1,
                   }}
                 >
-                  {submitting ? (
-                    <>
-                      <Loader2 size={14} className="animate-spin" /> Placing…
-                    </>
-                  ) : !shop.open ? (
+                  {!shop.open ? (
                     <>
                       <Clock size={14} /> Closed · {shop.label.short.replace(/^Closed · /, '')}
                     </>
                   ) : (
                     <>
-                      Place order <span className="arrow">→</span>
+                      Continue to payment <span className="arrow">→</span>
                     </>
                   )}
                 </button>
@@ -666,10 +678,27 @@ export default function CheckoutDrawer() {
                   textTransform: 'uppercase',
                 }}
               >
-                Cash · JazzCash · Easypaisa · NayaPay
+                Online payment only · no COD
               </p>
             </div>
           </>
+        )}
+
+        {/* ─── STEP: PAYMENT ────────────────────────────── */}
+        {step === 'payment' && (
+          <PaymentStep
+            total={total}
+            paymentId={paymentId}
+            setPaymentId={setPaymentId}
+            onBack={() => setStep('details')}
+            onConfirmPaid={placeOrder}
+            submitting={submitting}
+            submitErr={submitErr}
+            shopOpen={shop.open}
+            shopShort={shop.label.short}
+            cfToken={cfToken}
+            setCfToken={setCfToken}
+          />
         )}
 
         {step === 'placed' && placed && (
@@ -690,10 +719,26 @@ export default function CheckoutDrawer() {
               Order #{placed.order_number} <span className="ital">in</span>.
             </h4>
             <p style={{ color: 'var(--ink-soft)', fontSize: 15, lineHeight: 1.6 }}>
-              We&apos;ve saved your order and texted the bar. Tap WhatsApp below — that
-              confirms it with us instantly and you&apos;ll get a status update when we
-              accept it.
+              We&apos;ve received your order and we&apos;re verifying your payment now.
+              Tap WhatsApp below to confirm with the bar — you&apos;ll get a status
+              update once we&apos;ve accepted it.
             </p>
+            {paymentId && findPaymentOption(paymentId) && (
+              <div
+                className="rounded-xl px-3 py-2 inline-flex items-center gap-2 mx-auto"
+                style={{
+                  background: 'rgba(107,122,83,0.12)',
+                  color: 'var(--sage)',
+                  fontSize: 12,
+                  letterSpacing: '0.16em',
+                  textTransform: 'uppercase',
+                  fontWeight: 500,
+                }}
+              >
+                <Check size={12} />
+                Paid via {findPaymentOption(paymentId)?.label}
+              </div>
+            )}
             <div className="flex flex-col gap-2">
               <a
                 href={whatsAppUrlForCustomer()}
@@ -722,6 +767,7 @@ export default function CheckoutDrawer() {
                     setNotes('');
                     setStreet('');
                     setSubmitErr(null);
+                    setPaymentId(null);
                   }, 300);
                 }}
                 className="btn btn-ghost w-full"
@@ -738,6 +784,394 @@ export default function CheckoutDrawer() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* ─────────────────────── payment step ─────────────────────── */
+
+function PaymentStep({
+  total,
+  paymentId,
+  setPaymentId,
+  onBack,
+  onConfirmPaid,
+  submitting,
+  submitErr,
+  shopOpen,
+  shopShort,
+  cfToken,
+  setCfToken,
+}: {
+  total: number;
+  paymentId: string | null;
+  setPaymentId: (id: string) => void;
+  onBack: () => void;
+  onConfirmPaid: () => void;
+  submitting: boolean;
+  submitErr: string | null;
+  shopOpen: boolean;
+  shopShort: string;
+  cfToken: string | null;
+  setCfToken: (t: string | null) => void;
+}) {
+  const selected = paymentId ? findPaymentOption(paymentId) : null;
+
+  return (
+    <>
+      <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+        {/* Total banner */}
+        <div
+          className="rounded-2xl p-4 text-center"
+          style={{
+            background: 'var(--ink)',
+            color: 'var(--bone)',
+          }}
+        >
+          <div
+            className="eyebrow"
+            style={{ color: 'rgba(252,247,235,0.7)', marginBottom: 4 }}
+          >
+            Pay this amount
+          </div>
+          <div
+            className="serif"
+            style={{ fontSize: 38, color: 'var(--mustard)', letterSpacing: '-0.02em' }}
+          >
+            {pkr(total)}
+          </div>
+          <div
+            className="mt-2"
+            style={{ fontSize: 11, color: 'rgba(252,247,235,0.6)', letterSpacing: '0.14em', textTransform: 'uppercase' }}
+          >
+            Online payment only · no cash on delivery
+          </div>
+        </div>
+
+        {/* Payment method picker */}
+        <div className="space-y-2">
+          <p className="eyebrow" style={{ color: 'var(--ink-muted)' }}>
+            Choose how you&apos;ll pay
+          </p>
+          {PAYMENT_OPTIONS.map((p) => {
+            const active = paymentId === p.id;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => setPaymentId(p.id)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-colors text-left"
+                style={{
+                  border: '1px solid',
+                  borderColor: active ? 'var(--terra)' : 'var(--line-strong)',
+                  background: active ? 'rgba(196,69,38,0.06)' : 'var(--bone)',
+                }}
+              >
+                <span
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 999,
+                    background: active ? 'var(--terra)' : 'var(--cream)',
+                    color: active ? 'var(--bone)' : 'var(--ink)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 18,
+                    flexShrink: 0,
+                  }}
+                  aria-hidden
+                >
+                  {p.emoji ?? '💳'}
+                </span>
+                <span className="flex-1">
+                  <span className="serif block" style={{ fontSize: 16 }}>
+                    {p.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: 'var(--ink-muted)',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {p.kind === 'bank' ? 'IBFT · scan or transfer' : 'Send via the app'}
+                  </span>
+                </span>
+                <span
+                  style={{
+                    width: 16,
+                    height: 16,
+                    borderRadius: 999,
+                    border: '1px solid var(--line-strong)',
+                    background: active ? 'var(--terra)' : 'transparent',
+                    boxShadow: active ? 'inset 0 0 0 3px var(--bone)' : 'none',
+                    flexShrink: 0,
+                  }}
+                />
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Payment instructions for the selected method */}
+        {selected && (
+          <PaymentInstructions option={selected} amount={total} />
+        )}
+
+        {submitErr && (
+          <div
+            className="px-3 py-2.5 rounded-lg text-sm"
+            style={{
+              background: 'rgba(196,69,38,0.08)',
+              color: 'var(--terra-deep)',
+              border: '1px solid rgba(196,69,38,0.2)',
+            }}
+          >
+            {submitErr}
+          </div>
+        )}
+      </div>
+
+      <div
+        className="px-6 py-5 space-y-3"
+        style={{ borderTop: '1px solid var(--line)' }}
+      >
+        <Turnstile onToken={setCfToken} />
+
+        <div className="flex gap-2">
+          <button
+            onClick={onBack}
+            className="btn btn-outline"
+            style={{ flex: '0 0 auto' }}
+            disabled={submitting}
+          >
+            ← Back
+          </button>
+          <button
+            onClick={onConfirmPaid}
+            disabled={submitting || !paymentId || !shopOpen}
+            className="btn btn-terra"
+            style={{
+              flex: 1,
+              opacity: submitting || !paymentId || !shopOpen ? 0.6 : 1,
+            }}
+          >
+            {submitting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Confirming…
+              </>
+            ) : !shopOpen ? (
+              <>
+                <Clock size={14} /> Closed · {shopShort.replace(/^Closed · /, '')}
+              </>
+            ) : !paymentId ? (
+              <>Pick a method first</>
+            ) : (
+              <>
+                I&apos;ve paid — confirm <span className="arrow">↗</span>
+              </>
+            )}
+          </button>
+        </div>
+        <p
+          className="text-center"
+          style={{
+            color: 'var(--ink-muted)',
+            fontSize: 11,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+          }}
+        >
+          We verify before brewing — no charge for failed transfers
+        </p>
+      </div>
+    </>
+  );
+}
+
+/** Selected-method details: account name, account number (with copy),
+ *  optional QR image, instructions. */
+function PaymentInstructions({
+  option,
+  amount,
+}: {
+  option: PaymentOption;
+  amount: number;
+}) {
+  const [copied, setCopied] = useState<string | null>(null);
+
+  async function copy(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      setTimeout(() => setCopied((c) => (c === label ? null : c)), 1500);
+    } catch {
+      /* ignore — clipboard might not be available on http */
+    }
+  }
+
+  return (
+    <div
+      className="rounded-2xl p-4 space-y-4"
+      style={{
+        background: 'var(--cream)',
+        border: '1px solid var(--line-strong)',
+      }}
+    >
+      {option.note && (
+        <p
+          style={{
+            color: 'var(--ink-soft)',
+            fontSize: 13,
+            lineHeight: 1.5,
+          }}
+        >
+          {option.note}
+        </p>
+      )}
+
+      {option.qrImage && (
+        <div
+          className="mx-auto"
+          style={{
+            background: 'var(--bone)',
+            borderRadius: 14,
+            padding: 12,
+            border: '1px solid var(--line)',
+            width: 'fit-content',
+          }}
+        >
+          <Image
+            src={option.qrImage}
+            alt={`${option.label} QR code`}
+            width={220}
+            height={220}
+            className="rounded-lg"
+            style={{ display: 'block' }}
+            unoptimized
+          />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        <CopyRow
+          label={option.accountNumberLabel || 'Account'}
+          value={option.accountNumber}
+          mono
+          copied={copied === 'account'}
+          onCopy={() => copy('account', option.accountNumber)}
+        />
+        <CopyRow
+          label="Name"
+          value={option.accountName}
+          copied={copied === 'name'}
+          onCopy={() => copy('name', option.accountName)}
+        />
+        {option.bankName && (
+          <CopyRow
+            label="Bank"
+            value={option.branch ? `${option.bankName} · ${option.branch}` : option.bankName}
+            copied={copied === 'bank'}
+            onCopy={() =>
+              copy('bank', option.branch ? `${option.bankName} · ${option.branch}` : option.bankName!)
+            }
+          />
+        )}
+        <CopyRow
+          label="Amount"
+          value={pkr(amount)}
+          mono
+          copied={copied === 'amount'}
+          onCopy={() => copy('amount', String(amount))}
+        />
+      </div>
+
+      <div
+        className="rounded-lg p-3 flex items-start gap-2"
+        style={{
+          background: 'rgba(212,151,46,0.12)',
+          border: '1px solid rgba(212,151,46,0.3)',
+          color: 'var(--ink-soft)',
+          fontSize: 12,
+          lineHeight: 1.5,
+        }}
+      >
+        <ArrowRight size={12} style={{ marginTop: 3, flexShrink: 0, color: '#7a560f' }} />
+        <span>
+          Send <strong>{pkr(amount)}</strong> via {option.label}, then tap{' '}
+          <strong>I&apos;ve paid</strong> below. We&apos;ll verify in our app and start
+          brewing right after.
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CopyRow({
+  label,
+  value,
+  mono,
+  copied,
+  onCopy,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div
+      className="flex items-center gap-2 rounded-lg px-3 py-2"
+      style={{
+        background: 'var(--bone)',
+        border: '1px solid var(--line)',
+      }}
+    >
+      <div className="flex-1 min-w-0">
+        <div
+          style={{
+            fontSize: 10,
+            letterSpacing: '0.18em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-muted)',
+            fontWeight: 500,
+          }}
+        >
+          {label}
+        </div>
+        <div
+          className="truncate"
+          style={{
+            fontFamily: mono ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : 'inherit',
+            fontSize: 14,
+            color: 'var(--ink)',
+            letterSpacing: mono ? '0.02em' : 'normal',
+          }}
+        >
+          {value}
+        </div>
+      </div>
+      <button
+        type="button"
+        onClick={onCopy}
+        aria-label={`Copy ${label}`}
+        title="Copy"
+        className="inline-flex items-center justify-center"
+        style={{
+          width: 32,
+          height: 32,
+          borderRadius: 8,
+          background: copied ? 'var(--sage)' : 'var(--cream)',
+          color: copied ? 'var(--bone)' : 'var(--ink)',
+          border: '1px solid var(--line-strong)',
+          flexShrink: 0,
+          transition: 'all 200ms ease',
+        }}
+      >
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+      </button>
     </div>
   );
 }

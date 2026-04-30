@@ -26,6 +26,7 @@ import { verifyTurnstileToken } from '@/lib/turnstile';
 import {
   SHOP,
   findDeliveryArea,
+  findPaymentOption,
   applyPromo,
   type DeliveryAreaId,
   type DeliveryMethodId,
@@ -55,6 +56,7 @@ type IncomingPayload = {
   notes?: string | null;
   items: IncomingItem[];
   promo_code?: string | null; // server validates against PROMO_CODES
+  payment_method?: string | null; // id from PAYMENT_OPTIONS — required
   cf_token?: string | null;   // Cloudflare Turnstile token from the client
 };
 
@@ -177,6 +179,16 @@ async function handleOrder(req: Request) {
 
   // ── order type ──
   if (!VALID_ORDER_TYPES.includes(body.type)) return bad('Invalid order type');
+
+  // ── payment method (web orders pay online — no COD) ──
+  // The customer picks one of PAYMENT_OPTIONS in the checkout's payment
+  // step, transfers via that channel, then hits "I've paid". We don't
+  // verify the transfer here; staff confirm it in their banking app
+  // before accepting the order in /admin/orders.
+  const paymentOption = findPaymentOption(body.payment_method);
+  if (!paymentOption) {
+    return bad('Pick a payment method (we\'re online-payment only right now)');
+  }
 
   // ── delivery validation (area + method whitelist) ──
   let delivery_method: string | null = null;
@@ -305,7 +317,11 @@ async function handleOrder(req: Request) {
     delivery_lat: null,
     delivery_lng: null,
     delivery_distance_km: null,
-    payment_method: 'unpaid',
+    // Customer claims they paid via this method — staff will verify in
+    // their actual banking app before accepting the order. Use 'unpaid'
+    // before that point would be misleading; 'pending_verification' is
+    // a clearer marker (matches what /admin/orders surfaces too).
+    payment_method: paymentOption.id,
     subtotal,
     discount,
     total,

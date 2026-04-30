@@ -146,24 +146,46 @@ export default function PosPage() {
     const popup = phone ? window.open('about:blank', '_blank') : null;
 
     try {
-      const { data: order, error } = await supabase
+      // Defensive insert — same pattern as /api/orders. If the live DB
+      // hasn't had migration 009 applied yet, drop the promo_code column
+      // and retry so orders still save. Owner should run migration 009 +
+      // reload the Supabase schema cache to make this clean.
+      const baseRow = {
+        customer_id: customerId,
+        customer_name: customer?.name ?? null,
+        customer_phone: phone || customer?.phone || null,
+        order_type: orderType.toLowerCase(),
+        payment_method: payment,
+        subtotal,
+        discount,
+        total,
+        notes: notes || null,
+        status: 'completed',
+        channel: 'pos',
+      } as Record<string, any>;
+
+      let attempt = await supabase
         .from('orders')
-        .insert({
-          customer_id: customerId,
-          customer_name: customer?.name ?? null,
-          customer_phone: phone || customer?.phone || null,
-          order_type: orderType.toLowerCase(),
-          payment_method: payment,
-          subtotal,
-          discount,
-          total,
-          promo_code: promoResult.promo?.code || null,
-          notes: notes || null,
-          status: 'completed',
-          channel: 'pos',
-        })
+        .insert({ ...baseRow, promo_code: promoResult.promo?.code || null })
         .select('id, order_number')
         .single();
+
+      if (
+        attempt.error &&
+        (attempt.error.code === 'PGRST204' ||
+          /promo_code/i.test(attempt.error.message || ''))
+      ) {
+        console.warn(
+          '[pos] promo_code column missing — retrying without it. Run migration 009.'
+        );
+        attempt = await supabase
+          .from('orders')
+          .insert(baseRow)
+          .select('id, order_number')
+          .single();
+      }
+
+      const { data: order, error } = attempt;
       if (error) throw error;
       if (!order?.id) throw new Error('Order saved but no id returned');
 

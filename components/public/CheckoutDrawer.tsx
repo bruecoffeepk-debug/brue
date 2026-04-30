@@ -12,19 +12,38 @@
 // ─────────────────────────────────────────────────────────────
 
 import Image from 'next/image';
-import { useMemo, useState } from 'react';
-import { Check, Loader2, Minus, Plus, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Check, Clock, Loader2, Minus, Plus, X } from 'lucide-react';
 import { pkr } from '@/lib/utils';
 import { SHOP, applyPromo } from '@/lib/shop';
 import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
+import { isOpenNow, statusLabel } from '@/lib/hours';
 import { Turnstile } from './Turnstile';
+
+/** Re-evaluates `isOpenNow()` every 30s so a checkout drawer left open
+ *  across the closing-time boundary refuses to submit. */
+function useShopOpen() {
+  const [open, setOpen] = useState<boolean>(() => isOpenNow());
+  const [label, setLabel] = useState(() => statusLabel());
+  useEffect(() => {
+    const tick = () => {
+      setOpen(isOpenNow());
+      setLabel(statusLabel());
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, []);
+  return { open, label };
+}
 
 type Step = 'cart' | 'details' | 'placed';
 
 export default function CheckoutDrawer() {
   const { cart, cartOpen, closeCart, changeQty, subtotal, clearCart } = useCart();
   const zone = useZone();
+  const shop = useShopOpen();
   const [step, setStep] = useState<Step>('cart');
 
   const [name, setName] = useState('');
@@ -59,6 +78,11 @@ export default function CheckoutDrawer() {
 
   async function placeOrder() {
     setSubmitErr(null);
+    if (!shop.open) {
+      return setSubmitErr(
+        `We're closed right now. ${shop.label.detail.replace(/\.$/, '')}.`
+      );
+    }
     if (!name.trim()) return setSubmitErr('Add your name');
     if (!phone.trim()) return setSubmitErr('Add your WhatsApp number');
     if (type === 'delivery') {
@@ -582,6 +606,25 @@ export default function CheckoutDrawer() {
 
               <Turnstile onToken={setCfToken} />
 
+              {!shop.open && (
+                <div
+                  className="rounded-xl p-3 flex items-start gap-2.5"
+                  style={{
+                    background: 'rgba(28,23,18,0.06)',
+                    border: '1px solid var(--line-strong)',
+                    color: 'var(--ink-soft)',
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                  }}
+                >
+                  <Clock size={14} style={{ marginTop: 2, flexShrink: 0, color: 'var(--terra-deep)' }} />
+                  <div>
+                    <strong style={{ color: 'var(--ink)' }}>We&apos;re closed right now.</strong>{' '}
+                    {shop.label.detail} Your cart will keep until we open.
+                  </div>
+                </div>
+              )}
+
               <div className="flex gap-2">
                 <button
                   onClick={() => setStep('cart')}
@@ -592,13 +635,20 @@ export default function CheckoutDrawer() {
                 </button>
                 <button
                   onClick={placeOrder}
-                  disabled={submitting || needsArea}
+                  disabled={submitting || needsArea || !shop.open}
                   className="btn btn-terra"
-                  style={{ flex: 1, opacity: submitting || needsArea ? 0.6 : 1 }}
+                  style={{
+                    flex: 1,
+                    opacity: submitting || needsArea || !shop.open ? 0.6 : 1,
+                  }}
                 >
                   {submitting ? (
                     <>
                       <Loader2 size={14} className="animate-spin" /> Placing…
+                    </>
+                  ) : !shop.open ? (
+                    <>
+                      <Clock size={14} /> Closed · {shop.label.short.replace(/^Closed · /, '')}
                     </>
                   ) : (
                     <>

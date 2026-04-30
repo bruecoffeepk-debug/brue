@@ -30,6 +30,7 @@ import {
   type DeliveryAreaId,
   type DeliveryMethodId,
 } from '@/lib/shop';
+import { isOpenNow, statusLabel } from '@/lib/hours';
 
 export const dynamic = 'force-dynamic';
 
@@ -116,6 +117,20 @@ async function handleOrder(req: Request) {
         originHost.startsWith('localhost:');
       if (!isAllowed) return bad('Cross-origin request blocked', 403);
     }
+  }
+
+  // ── shop-closed gate ──
+  // The bar runs Karachi-time hours from lib/shop.ts. If we're outside the
+  // open window, refuse new orders so staff aren't woken up at 3 am. The
+  // friendly message tells the customer when we open again so they can
+  // come back. /admin/orders stays unaffected — staff can still tinker
+  // with old orders.
+  if (!isOpenNow()) {
+    const status = statusLabel();
+    return bad(
+      `We're closed right now — ${status.detail.replace(/\.$/, '')}. Please order again then.`,
+      409
+    );
   }
 
   // ── rate limit (per IP) BEFORE any work ──
@@ -273,31 +288,57 @@ async function handleOrder(req: Request) {
   }
 
   // ── insert order ──
+  // We attempt the insert WITH promo_code first. If the live DB hasn't had
+  // migration 009 applied yet (or its schema cache is stale), PostgREST
+  // returns PGRST204 ("column not found"). In that case we retry without
+  // promo_code so orders still go through — the discount itself was already
+  // applied to the totals. Owner should run migration 009 + Supabase
+  // Dashboard → API → Reload Schema to make this clean.
   const notes = (body.notes || '').trim().slice(0, 1000) || null;
-  const { data: order, error: orderErr } = await supabase
+  const baseOrderRow = {
+    customer_id,
+    customer_name: name,
+    customer_phone: phone,
+    order_type: body.type,
+    delivery_address,
+    delivery_method,
+    delivery_lat: null,
+    delivery_lng: null,
+    delivery_distance_km: null,
+    payment_method: 'unpaid',
+    subtotal,
+    discount,
+    total,
+    notes,
+    status: 'pending',
+    channel: 'web',
+  } as Record<string, any>;
+
+  let orderInsert = await supabase
     .from('orders')
-    .insert({
-      customer_id,
-      customer_name: name,
-      customer_phone: phone,
-      order_type: body.type,
-      delivery_address,
-      delivery_method,
-      delivery_lat: null,
-      delivery_lng: null,
-      delivery_distance_km: null,
-      payment_method: 'unpaid',
-      subtotal,
-      discount,
-      total,
-      promo_code: promoCodeApplied,
-      notes,
-      status: 'pending',
-      channel: 'web',
-    })
+    .insert({ ...baseOrderRow, promo_code: promoCodeApplied })
     .select('id, order_number, created_at')
     .single();
 
+  // PGRST204 = "Could not find the 'X' column of 'Y' in the schema cache"
+  // PGRST205 = same family. Be permissive on the message text too.
+  if (
+    orderInsert.error &&
+    (orderInsert.error.code === 'PGRST204' ||
+      /promo_code/i.test(orderInsert.error.message || ''))
+  ) {
+    console.warn(
+      '[/api/orders] promo_code column missing — retrying without it. Run migration 009 + reload Supabase schema cache.'
+    );
+    orderInsert = await supabase
+      .from('orders')
+      .insert(baseOrderRow)
+      .select('id, order_number, created_at')
+      .single();
+  }
+
+  const order = orderInsert.data;
+  const orderErr = orderInsert.error;
   if (orderErr || !order) {
     return bad(orderErr?.message || 'Could not place order', 500);
   }

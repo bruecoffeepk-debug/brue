@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Instrument_Serif, Fraunces, Inter_Tight, Caveat } from 'next/font/google';
 import './globals.css';
 
@@ -32,6 +32,17 @@ const script = Caveat({
   variable: '--font-script',
   display: 'swap',
 });
+
+// Locks initial-scale = 1 so iOS doesn't zoom on focused inputs (combined
+// with the 16px input font-size in globals.css). User-scaling is left on
+// (maximumScale = 5) for accessibility. viewport-fit = cover lets the page
+// extend under notches / dynamic islands on modern phones.
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+  viewportFit: 'cover',
+};
 
 export const metadata: Metadata = {
   title: 'BRUE — Cold · Coffee · Juices · Karachi',

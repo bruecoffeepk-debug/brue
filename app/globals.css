@@ -30,8 +30,15 @@
   box-sizing: border-box;
 }
 
+/* Defensive: prevent any image / video / svg from forcing a wider
+   layout than its container. Common cause of mobile horizontal scroll. */
+img, svg, video, canvas, picture {
+  max-width: 100%;
+}
+
 html {
   scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
 }
 
 html,
@@ -41,6 +48,16 @@ body {
   font-family: var(--font-sans), 'Inter Tight', system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.55;
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Kill horizontal scroll caused by negative-position decorations + stray
+   100vw elements. `overflow-x: clip` is preferred over `hidden` because
+   it doesn't create a scroll context — `position: sticky` descendants
+   keep working (the menu category pills, the orders bubble, etc.). */
+body {
+  overflow-x: clip;
 }
 
 ::selection {
@@ -191,14 +208,17 @@ a {
   color: var(--ink-muted);
 }
 
-/* Input styles. ".field" is also the legacy POS class, so it shares input styling. */
+/* Input styles. ".field" is also the legacy POS class, so it shares input styling.
+   Font-size MUST be >= 16px on mobile or iOS Safari zooms in on focus and never
+   zooms back out. We use 16px globally and downgrade visually with line-height
+   tweaks where needed; far simpler than juggling per-breakpoint font sizes. */
 .input,
 .textarea,
 .select,
 .field {
   appearance: none;
   font-family: var(--font-sans);
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 400;
   color: var(--ink);
   background: var(--bone);
@@ -208,6 +228,12 @@ a {
   line-height: 1.4;
   transition: border-color 0.2s, box-shadow 0.2s;
   width: 100%;
+  max-width: 100%;
+}
+input, textarea, select {
+  /* Catches any stray <input> not using one of our classes (e.g. POS legacy
+     bits, search bar). Same iOS-zoom prevention. */
+  font-size: 16px;
 }
 .input:focus,
 .textarea:focus,

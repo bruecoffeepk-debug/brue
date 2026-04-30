@@ -79,6 +79,12 @@ export default function OrdersClient({
   // Sound preference — persisted in localStorage so it survives reloads.
   // Default ON: this is a kitchen / counter screen, you want the ping.
   const [soundOn, setSoundOn] = useState<boolean>(true);
+  // Audio is "unlocked" only after the user has interacted with the page
+  // (browser autoplay policy). We track this so we can show "Test" / "Tap to
+  // unlock" in the UI and also avoid silently dropping pings before unlock.
+  const [audioUnlocked, setAudioUnlocked] = useState(false);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+
   useEffect(() => {
     try {
       const saved = localStorage.getItem('brue.orders.soundOn');
@@ -88,6 +94,69 @@ export default function OrdersClient({
   useEffect(() => {
     try { localStorage.setItem('brue.orders.soundOn', soundOn ? '1' : '0'); } catch {}
   }, [soundOn]);
+
+  /** Lazily create the shared AudioContext and resume it. MUST be called
+   *  from inside a user gesture (click / keypress / touch) the first time
+   *  or the browser keeps the context suspended and every ding plays
+   *  silently. After the first resume, future plays work without a gesture. */
+  function ensureAudioUnlocked(): AudioContext | null {
+    try {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!Ctx) return null;
+      if (!audioCtxRef.current) audioCtxRef.current = new Ctx();
+      const ctx = audioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
+      if (ctx.state === 'running') {
+        if (!audioUnlocked) setAudioUnlocked(true);
+      }
+      return ctx;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Play the two-note ding using the shared, already-unlocked context. */
+  function playDing() {
+    const ctx = audioCtxRef.current;
+    if (!ctx || ctx.state !== 'running') return;
+    try {
+      [880, 1320].forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        const start = ctx.currentTime + i * 0.13;
+        gain.gain.setValueAtTime(0, start);
+        gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
+        osc.start(start);
+        osc.stop(start + 0.5);
+      });
+    } catch {
+      /* ignore — context might have closed */
+    }
+  }
+
+  // Belt-and-suspenders: any click anywhere on the page also tries to
+  // unlock audio. So even if the staff doesn't touch the bell button, the
+  // first time they click anything (a row, the search input) the context
+  // resumes and future dings work.
+  useEffect(() => {
+    const onAnyClick = () => ensureAudioUnlocked();
+    window.addEventListener('click', onAnyClick);
+    window.addEventListener('keydown', onAnyClick);
+    window.addEventListener('touchstart', onAnyClick, { passive: true });
+    return () => {
+      window.removeEventListener('click', onAnyClick);
+      window.removeEventListener('keydown', onAnyClick);
+      window.removeEventListener('touchstart', onAnyClick);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Track which order ids we've already seen so we know what's "new".
   // Initial baseline = the orders rendered on first server render.
@@ -129,7 +198,7 @@ export default function OrdersClient({
           for (const o of fresh) next.add(o.id);
           return next;
         });
-        if (soundOn) playOrderDing();
+        if (soundOn) playDing();
         // Best-effort browser notification (silent if user hasn't allowed it).
         if ('Notification' in window && Notification.permission === 'granted') {
           new Notification('BRUE — new order', {
@@ -237,26 +306,60 @@ export default function OrdersClient({
     });
   }
 
-  // Bell toggle is rendered even when there are no orders, so the staff can
-  // pre-toggle sound off before the rush.
+  // Bell toggle + Test button. The Test button does double duty: it gives
+  // staff instant feedback that audio works AND unlocks the AudioContext
+  // (browser autoplay policy needs a user gesture). Clicking the bell to
+  // turn sound ON also unlocks.
   const SoundToggle = (
-    <button
-      onClick={() => setSoundOn((v) => !v)}
-      title={soundOn ? 'Sound on — click to mute' : 'Sound off — click to unmute'}
-      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
-      style={{
-        background: soundOn ? 'rgba(107,122,83,0.12)' : 'rgba(28,23,18,0.06)',
-        color: soundOn ? 'var(--sage)' : 'var(--ink-muted)',
-        border: `1px solid ${soundOn ? 'rgba(107,122,83,0.32)' : 'var(--line)'}`,
-        fontSize: 11,
-        letterSpacing: '0.16em',
-        textTransform: 'uppercase',
-        fontWeight: 500,
-      }}
-    >
-      {soundOn ? <Bell size={11} /> : <BellOff size={11} />}
-      Sound {soundOn ? 'on' : 'off'}
-    </button>
+    <div className="inline-flex items-center gap-2">
+      <button
+        onClick={() => {
+          ensureAudioUnlocked();
+          setSoundOn((v) => !v);
+        }}
+        title={soundOn ? 'Sound on — click to mute' : 'Sound off — click to unmute'}
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+        style={{
+          background: soundOn ? 'rgba(107,122,83,0.12)' : 'rgba(28,23,18,0.06)',
+          color: soundOn ? 'var(--sage)' : 'var(--ink-muted)',
+          border: `1px solid ${soundOn ? 'rgba(107,122,83,0.32)' : 'var(--line)'}`,
+          fontSize: 11,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+        }}
+      >
+        {soundOn ? <Bell size={11} /> : <BellOff size={11} />}
+        Sound {soundOn ? 'on' : 'off'}
+      </button>
+      <button
+        onClick={() => {
+          const ctx = ensureAudioUnlocked();
+          // After a tick (the resume Promise), play. Use a small delay so
+          // a freshly-resumed context is in 'running' state by then.
+          setTimeout(() => {
+            if (ctx && ctx.state === 'running') playDing();
+          }, 50);
+        }}
+        title={
+          audioUnlocked
+            ? 'Test ding'
+            : 'Tap to unlock audio (browser blocks sound until you click)'
+        }
+        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full"
+        style={{
+          background: 'transparent',
+          color: audioUnlocked ? 'var(--ink-soft)' : 'var(--terra-deep)',
+          border: `1px solid ${audioUnlocked ? 'var(--line)' : 'rgba(196,69,38,0.35)'}`,
+          fontSize: 11,
+          letterSpacing: '0.16em',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+        }}
+      >
+        {audioUnlocked ? 'Test' : 'Tap to unlock'}
+      </button>
+    </div>
   );
 
   // Floating "N new" bubble — sticky at the top, click to scroll to first new.
@@ -550,35 +653,11 @@ export default function OrdersClient({
 }
 
 /* ─────────────────────────── helpers ─────────────────────────── */
-
-/** Pleasant two-note ascending ding via Web Audio. No mp3 file needed.
- *  Browser autoplay policy: silent until the user has interacted with the
- *  page once. After that, all subsequent dings work. */
-function playOrderDing() {
-  try {
-    const Ctx = (window.AudioContext || (window as any).webkitAudioContext);
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    [880, 1320].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.frequency.value = freq;
-      osc.type = 'sine';
-      const start = ctx.currentTime + i * 0.13;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.22, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.45);
-      osc.start(start);
-      osc.stop(start + 0.5);
-    });
-    // Close the context after a beat so we don't leak audio nodes.
-    setTimeout(() => ctx.close().catch(() => {}), 800);
-  } catch {
-    /* AudioContext blocked or unavailable — silent fallback */
-  }
-}
+// playOrderDing was moved INTO OrdersClient as playDing() so it can share
+// a single, lazily-resumed AudioContext per session. Browsers won't play
+// from a freshly-created AudioContext until the user has interacted with
+// the page — see ensureAudioUnlocked() in the component for the gesture
+// hook that calls ctx.resume() on first click / keypress / touch.
 
 const BUBBLE_KEYFRAMES = `
 @keyframes brue-pulse {

@@ -184,20 +184,25 @@ function PickStep({
     setLocMsg(null);
     try {
       const res = await autoFillAddress();
-      if (res.matchedArea) {
+      // Don't auto-pick — Nominatim's block-level data in Karachi is too
+      // unreliable (mixes Block B with Block L, etc.). Show the user a
+      // hint of what we detected so they can pick the right one manually
+      // from the list below. The text gets pre-set into the search box
+      // so matching blocks rise to the top.
+      const hint =
+        res.parts.areaName ||
+        res.parts.display.split(',').slice(0, 2).join(', ');
+      if (hint) {
         setLocMsg({
           tone: 'ok',
-          text: `Picked ${res.matchedArea.cluster} · ${res.matchedArea.label}`,
+          text: `📍 You're near ${hint}. Tap the right block below.`,
         });
-        // Brief pause so the user sees the success line before the gate closes
-        setTimeout(() => onPick(res.matchedArea!), 400);
+        // Pre-fill the search box so the user's area surfaces first
+        if (res.parts.areaName) setQuery(res.parts.areaName);
       } else {
         setLocMsg({
           tone: 'err',
-          text:
-            res.parts.areaName || res.parts.display
-              ? `You look like ${res.parts.areaName || res.parts.display.split(',')[0]} — not on our list yet. Pick the closest block manually.`
-              : "Couldn't match your location to a covered block. Pick one manually.",
+          text: "Couldn't read your location well. Pick your block manually.",
         });
       }
     } catch (e: any) {

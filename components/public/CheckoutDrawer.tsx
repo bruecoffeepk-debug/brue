@@ -69,7 +69,23 @@ export default function CheckoutDrawer() {
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
+  /** Which form field caused the most recent error — drives red borders. */
+  const [errField, setErrField] = useState<
+    'name' | 'phone' | 'house' | 'block' | 'area' | 'payment' | null
+  >(null);
   const [cfToken, setCfToken] = useState<string | null>(null);
+
+  /** Set the error message + which field is at fault (red border). */
+  function fail(field: typeof errField, msg: string) {
+    setErrField(field);
+    setSubmitErr(msg);
+  }
+  /** Style helper for red borders on invalid fields. */
+  function fieldStyle(field: typeof errField): React.CSSProperties {
+    return errField === field
+      ? { borderColor: '#c44526', boxShadow: '0 0 0 3px rgba(196,69,38,0.12)' }
+      : {};
+  }
 
   // Pre-fill block/area from the zone the visitor picked at the gate.
   // Re-runs if they change the zone — so a "Change" button in the address
@@ -86,22 +102,25 @@ export default function CheckoutDrawer() {
     setLocMsg(null);
     try {
       const res = await autoFillAddress();
-      if (res.parts.houseNo) setHouseNo(res.parts.houseNo);
-      else if (res.parts.road) setHouseNo((curr) => curr || res.parts.road);
-      if (res.parts.blockNo) setBlockNo(res.parts.blockNo);
-      if (res.parts.areaName) setAreaName(res.parts.areaName);
-      // Validate the auto-filled area is on our covered list
-      if (res.matchedArea) {
-        setLocMsg({
-          tone: 'ok',
-          text: `Filled from your location · ${res.matchedArea.cluster} · ${res.matchedArea.label}`,
-        });
-      } else {
-        setLocMsg({
-          tone: 'err',
-          text: 'Filled from location, but your area isn\'t on our delivery list. Edit the fields if needed.',
-        });
-      }
+      // Only auto-fill the house / road bit — Nominatim's block + area
+      // tagging in Karachi is unreliable, and the visitor already picked
+      // the correct block + area at the welcome gate (or can edit them
+      // here directly). Overwriting with wrong data made things worse.
+      const detected =
+        res.parts.houseNo ||
+        res.parts.road ||
+        res.parts.display.split(',')[0] ||
+        '';
+      if (detected) setHouseNo(detected);
+      const nearby =
+        res.parts.areaName ||
+        res.parts.display.split(',').slice(0, 2).join(', ');
+      setLocMsg({
+        tone: 'ok',
+        text: nearby
+          ? `📍 Near ${nearby}. House field filled — verify block + area below are right.`
+          : 'House field filled — verify block + area below are right.',
+      });
     } catch (e: any) {
       setLocMsg({ tone: 'err', text: e?.message || 'Location unavailable' });
     } finally {
@@ -127,23 +146,22 @@ export default function CheckoutDrawer() {
 
   async function placeOrder() {
     setSubmitErr(null);
+    setErrField(null);
     if (!shop.open) {
-      return setSubmitErr(
-        `We're closed right now. ${shop.label.detail.replace(/\.$/, '')}.`
-      );
+      return fail(null, `We're closed right now. ${shop.label.detail.replace(/\.$/, '')}.`);
     }
-    if (!name.trim()) return setSubmitErr('Add your name');
+    if (!name.trim()) return fail('name', 'Add your name');
     const normalisedPhone = validatePkPhone(phone);
     if (!normalisedPhone) {
-      return setSubmitErr('Phone must be a valid PK mobile (e.g. 0300 1234567)');
+      return fail('phone', 'Phone must be a valid PK mobile (e.g. 0300 1234567)');
     }
     if (type === 'delivery') {
-      if (!zone.area) return setSubmitErr('Pick a delivery area first');
-      if (!houseNo.trim()) return setSubmitErr('Add your house no.');
-      if (!blockNo.trim()) return setSubmitErr('Add your block no.');
-      if (!areaName.trim()) return setSubmitErr('Add your area name');
+      if (!zone.area) return fail(null, 'Pick a delivery area first');
+      if (!houseNo.trim()) return fail('house', 'Add your house no.');
+      if (!blockNo.trim()) return fail('block', 'Add your block no.');
+      if (!areaName.trim()) return fail('area', 'Add your area name');
     }
-    if (!paymentId) return setSubmitErr('Pick a payment method');
+    if (!paymentId) return fail('payment', 'Pick a payment method');
 
     setSubmitting(true);
     try {
@@ -210,6 +228,9 @@ export default function CheckoutDrawer() {
       // for the next session.
       clearCart();
     } catch (e: any) {
+      // Always log the raw error so we can debug from the browser console
+      // when staff or the owner is testing on prod.
+      console.error('[checkout] placeOrder failed', e);
       const msg =
         e?.name === 'TypeError'
           ? 'No connection — check your internet and try again.'
@@ -409,8 +430,10 @@ export default function CheckoutDrawer() {
                   id="ck-name"
                   className="input"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => { setName(e.target.value); if (errField === 'name') setErrField(null); }}
                   placeholder="So we know who's at the door"
+                  style={fieldStyle('name')}
+                  aria-invalid={errField === 'name'}
                 />
               </div>
               <div className="field-group">
@@ -419,11 +442,13 @@ export default function CheckoutDrawer() {
                   id="ck-phone"
                   className="input"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(e) => { setPhone(e.target.value); if (errField === 'phone') setErrField(null); }}
                   placeholder="0300 1234567"
                   inputMode="tel"
                   autoComplete="tel"
                   maxLength={20}
+                  style={fieldStyle('phone')}
+                  aria-invalid={errField === 'phone'}
                 />
                 {phone.trim() && (
                   <p
@@ -586,25 +611,31 @@ export default function CheckoutDrawer() {
                         className="input"
                         placeholder="House no. (e.g. House 12-C)"
                         value={houseNo}
-                        onChange={(e) => setHouseNo(e.target.value.slice(0, 100))}
+                        onChange={(e) => { setHouseNo(e.target.value.slice(0, 100)); if (errField === 'house') setErrField(null); }}
                         autoComplete="address-line1"
                         aria-label="House number"
+                        style={fieldStyle('house')}
+                        aria-invalid={errField === 'house'}
                       />
                       <input
                         className="input"
                         placeholder="Block no. (e.g. Block 7)"
                         value={blockNo}
-                        onChange={(e) => setBlockNo(e.target.value.slice(0, 60))}
+                        onChange={(e) => { setBlockNo(e.target.value.slice(0, 60)); if (errField === 'block') setErrField(null); }}
                         autoComplete="address-line2"
                         aria-label="Block number"
+                        style={fieldStyle('block')}
+                        aria-invalid={errField === 'block'}
                       />
                       <input
                         className="input"
                         placeholder="Area name (e.g. FB Area)"
                         value={areaName}
-                        onChange={(e) => setAreaName(e.target.value.slice(0, 80))}
+                        onChange={(e) => { setAreaName(e.target.value.slice(0, 80)); if (errField === 'area') setErrField(null); }}
                         autoComplete="address-level2"
                         aria-label="Area name"
+                        style={fieldStyle('area')}
+                        aria-invalid={errField === 'area'}
                       />
                     </div>
                     {locMsg && (
@@ -767,13 +798,17 @@ export default function CheckoutDrawer() {
                 </button>
                 <button
                   onClick={() => {
-                    // Validate details before going to the payment step
                     setSubmitErr(null);
-                    if (!name.trim()) return setSubmitErr('Add your name');
-                    if (!phone.trim()) return setSubmitErr('Add your WhatsApp number');
+                    setErrField(null);
+                    if (!name.trim()) return fail('name', 'Add your name');
+                    if (!validatePkPhone(phone)) {
+                      return fail('phone', 'Phone must be a valid PK mobile (e.g. 0300 1234567)');
+                    }
                     if (type === 'delivery') {
-                      if (!zone.area) return setSubmitErr('Pick a delivery area first');
-                      if (!street.trim()) return setSubmitErr('Add your street / house detail');
+                      if (!zone.area) return fail(null, 'Pick a delivery area first');
+                      if (!houseNo.trim()) return fail('house', 'Add your house no.');
+                      if (!blockNo.trim()) return fail('block', 'Add your block no.');
+                      if (!areaName.trim()) return fail('area', 'Add your area name');
                     }
                     setStep('payment');
                   }}

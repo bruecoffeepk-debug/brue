@@ -13,12 +13,13 @@
 
 import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Check, Clock, Copy, Loader2, Minus, Plus, X } from 'lucide-react';
+import { ArrowRight, Check, Clock, Copy, Crosshair, Loader2, Minus, Plus, X } from 'lucide-react';
 import { pkr } from '@/lib/utils';
 import { SHOP, PAYMENT_OPTIONS, applyPromo, findPaymentOption, type PaymentOption } from '@/lib/shop';
 import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
 import { isOpenNow, statusLabel } from '@/lib/hours';
+import { autoFillAddress, validatePkPhone, formatPkPhone } from '@/lib/geo-fill';
 import { Turnstile } from './Turnstile';
 
 /** Re-evaluates `isOpenNow()` every 30s so a checkout drawer left open
@@ -52,14 +53,61 @@ export default function CheckoutDrawer() {
     zone.canOrder ? 'delivery' : 'pickup'
   );
   const [method, setMethod] = useState<string>(SHOP.delivery.methods[0].id);
-  const [street, setStreet] = useState('');
+  // Address split into 3 explicit components so it matches what the gate
+  // captures + so geolocation auto-fill can populate each cleanly.
+  // - House no: typed by visitor (rider needs the door)
+  // - Block no: pre-filled from zone.area.label, editable
+  // - Area name: pre-filled from zone.area.cluster, editable
+  const [houseNo, setHouseNo] = useState('');
+  const [blockNo, setBlockNo] = useState('');
+  const [areaName, setAreaName] = useState('');
   const [notes, setNotes] = useState('');
   const [promoInput, setPromoInput] = useState('');
+  const [locating, setLocating] = useState(false);
+  const [locMsg, setLocMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitErr, setSubmitErr] = useState<string | null>(null);
   const [cfToken, setCfToken] = useState<string | null>(null);
+
+  // Pre-fill block/area from the zone the visitor picked at the gate.
+  // Re-runs if they change the zone — so a "Change" button in the address
+  // section repopulates correctly.
+  useEffect(() => {
+    if (zone.area) {
+      setBlockNo((curr) => curr || zone.area!.label);
+      setAreaName((curr) => curr || zone.area!.cluster);
+    }
+  }, [zone.area]);
+
+  async function detectAddress() {
+    setLocating(true);
+    setLocMsg(null);
+    try {
+      const res = await autoFillAddress();
+      if (res.parts.houseNo) setHouseNo(res.parts.houseNo);
+      else if (res.parts.road) setHouseNo((curr) => curr || res.parts.road);
+      if (res.parts.blockNo) setBlockNo(res.parts.blockNo);
+      if (res.parts.areaName) setAreaName(res.parts.areaName);
+      // Validate the auto-filled area is on our covered list
+      if (res.matchedArea) {
+        setLocMsg({
+          tone: 'ok',
+          text: `Filled from your location · ${res.matchedArea.cluster} · ${res.matchedArea.label}`,
+        });
+      } else {
+        setLocMsg({
+          tone: 'err',
+          text: 'Filled from location, but your area isn\'t on our delivery list. Edit the fields if needed.',
+        });
+      }
+    } catch (e: any) {
+      setLocMsg({ tone: 'err', text: e?.message || 'Location unavailable' });
+    } finally {
+      setLocating(false);
+    }
+  }
 
   const promoPreview = useMemo(
     () => applyPromo(subtotal, promoInput, 'web'),
@@ -85,10 +133,15 @@ export default function CheckoutDrawer() {
       );
     }
     if (!name.trim()) return setSubmitErr('Add your name');
-    if (!phone.trim()) return setSubmitErr('Add your WhatsApp number');
+    const normalisedPhone = validatePkPhone(phone);
+    if (!normalisedPhone) {
+      return setSubmitErr('Phone must be a valid PK mobile (e.g. 0300 1234567)');
+    }
     if (type === 'delivery') {
       if (!zone.area) return setSubmitErr('Pick a delivery area first');
-      if (!street.trim()) return setSubmitErr('Add your street / house detail');
+      if (!houseNo.trim()) return setSubmitErr('Add your house no.');
+      if (!blockNo.trim()) return setSubmitErr('Add your block no.');
+      if (!areaName.trim()) return setSubmitErr('Add your area name');
     }
     if (!paymentId) return setSubmitErr('Pick a payment method');
 
@@ -98,11 +151,20 @@ export default function CheckoutDrawer() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          customer: { name, phone },
+          customer: { name, phone: normalisedPhone },
           type,
           delivery:
             type === 'delivery' && zone.area
-              ? { method, area_id: zone.area.id, street }
+              ? {
+                  method,
+                  area_id: zone.area.id,
+                  house_no: houseNo.trim(),
+                  block_no: blockNo.trim(),
+                  area_name: areaName.trim(),
+                  // Composed string kept for back-compat with anything still
+                  // reading `street` server-side.
+                  street: `${houseNo.trim()}, ${blockNo.trim()}, ${areaName.trim()}`,
+                }
               : undefined,
           notes,
           promo_code: promoInput.trim() || null,
@@ -165,8 +227,8 @@ export default function CheckoutDrawer() {
       .map((l) => `• ${l.qty} × ${l.name} — ${pkr(l.price * l.qty)}`)
       .join('%0A');
     const addressLine =
-      type === 'delivery' && zone.area
-        ? `${zone.area.cluster} · ${zone.area.label} — ${street}`
+      type === 'delivery'
+        ? `${houseNo}, ${blockNo}, ${areaName}`
         : '';
     const promoLine = promoPreview.promo
       ? `%0A${encodeURIComponent(promoPreview.promo.label)}: − ${pkr(promoPreview.discount)}`
@@ -358,9 +420,24 @@ export default function CheckoutDrawer() {
                   className="input"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
-                  placeholder="03xx xxxxxxx"
+                  placeholder="0300 1234567"
                   inputMode="tel"
+                  autoComplete="tel"
+                  maxLength={20}
                 />
+                {phone.trim() && (
+                  <p
+                    className="mt-1.5"
+                    style={{
+                      fontSize: 11,
+                      color: validatePkPhone(phone) ? 'var(--sage)' : 'var(--ink-muted)',
+                    }}
+                  >
+                    {validatePkPhone(phone)
+                      ? `✓ ${formatPkPhone(validatePkPhone(phone)!)}`
+                      : 'Enter a PK mobile (11 digits, e.g. 0300 1234567)'}
+                  </p>
+                )}
               </div>
 
               <div className="field-group">
@@ -483,19 +560,68 @@ export default function CheckoutDrawer() {
                   </div>
 
                   <div className="field-group">
-                    <label htmlFor="ck-street">Street / house detail</label>
-                    <textarea
-                      id="ck-street"
-                      className="textarea"
-                      rows={2}
-                      value={street}
-                      onChange={(e) => setStreet(e.target.value)}
-                      placeholder="House #, street, landmark — so the rider can find you"
-                    />
-                    <p style={{ color: 'var(--ink-muted)', fontSize: 11, marginTop: 6 }}>
-                      Area is locked to{' '}
-                      <strong>{zone.area?.label ?? '—'}</strong>. Change it from the pill
-                      above if you moved.
+                    <label>Delivery address</label>
+
+                    <button
+                      type="button"
+                      onClick={detectAddress}
+                      disabled={locating}
+                      className="inline-flex items-center gap-2 px-3 py-2 rounded-full mb-3"
+                      style={{
+                        background: 'var(--ink)',
+                        color: 'var(--bone)',
+                        fontSize: 11,
+                        letterSpacing: '0.16em',
+                        textTransform: 'uppercase',
+                        fontWeight: 500,
+                        opacity: locating ? 0.6 : 1,
+                      }}
+                    >
+                      {locating ? <Loader2 size={11} className="animate-spin" /> : <Crosshair size={11} />}
+                      {locating ? 'Locating…' : 'Use my location'}
+                    </button>
+
+                    <div className="space-y-2">
+                      <input
+                        className="input"
+                        placeholder="House no. (e.g. House 12-C)"
+                        value={houseNo}
+                        onChange={(e) => setHouseNo(e.target.value.slice(0, 100))}
+                        autoComplete="address-line1"
+                        aria-label="House number"
+                      />
+                      <input
+                        className="input"
+                        placeholder="Block no. (e.g. Block 7)"
+                        value={blockNo}
+                        onChange={(e) => setBlockNo(e.target.value.slice(0, 60))}
+                        autoComplete="address-line2"
+                        aria-label="Block number"
+                      />
+                      <input
+                        className="input"
+                        placeholder="Area name (e.g. FB Area)"
+                        value={areaName}
+                        onChange={(e) => setAreaName(e.target.value.slice(0, 80))}
+                        autoComplete="address-level2"
+                        aria-label="Area name"
+                      />
+                    </div>
+                    {locMsg && (
+                      <p
+                        className="mt-2"
+                        style={{
+                          fontSize: 12,
+                          color: locMsg.tone === 'ok' ? 'var(--sage)' : 'var(--terra-deep)',
+                        }}
+                      >
+                        {locMsg.text}
+                      </p>
+                    )}
+                    <p style={{ color: 'var(--ink-muted)', fontSize: 11, marginTop: 8 }}>
+                      Block + area are pre-filled from{' '}
+                      <strong>{zone.area?.label ?? '—'}</strong>. Edit if you moved or
+                      change the zone via the pill above.
                     </p>
                   </div>
                 </>
@@ -765,7 +891,9 @@ export default function CheckoutDrawer() {
                     setPlaced(null);
                     setPromoInput('');
                     setNotes('');
-                    setStreet('');
+                    setHouseNo('');
+                    setBlockNo('');
+                    setAreaName('');
                     setSubmitErr(null);
                     setPaymentId(null);
                   }, 300);

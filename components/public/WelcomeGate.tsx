@@ -16,9 +16,10 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { MapPin, X, Check, Search, ArrowRight, MessageCircle } from 'lucide-react';
+import { MapPin, X, Check, Search, ArrowRight, MessageCircle, Loader2, Crosshair } from 'lucide-react';
 import { useZone } from '@/lib/zone-context';
 import { SHOP, deliveryAreaClusters, type DeliveryArea } from '@/lib/shop';
+import { autoFillAddress } from '@/lib/geo-fill';
 import Flower from '@/components/brand/Flower';
 import Wordmark from '@/components/brand/Wordmark';
 
@@ -175,6 +176,37 @@ function PickStep({
   onBrowse: () => void;
 }) {
   const totalAreas = allClusters.reduce((s, c) => s + c.areas.length, 0);
+  const [locating, setLocating] = useState(false);
+  const [locMsg, setLocMsg] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
+
+  async function detect() {
+    setLocating(true);
+    setLocMsg(null);
+    try {
+      const res = await autoFillAddress();
+      if (res.matchedArea) {
+        setLocMsg({
+          tone: 'ok',
+          text: `Picked ${res.matchedArea.cluster} · ${res.matchedArea.label}`,
+        });
+        // Brief pause so the user sees the success line before the gate closes
+        setTimeout(() => onPick(res.matchedArea!), 400);
+      } else {
+        setLocMsg({
+          tone: 'err',
+          text:
+            res.parts.areaName || res.parts.display
+              ? `You look like ${res.parts.areaName || res.parts.display.split(',')[0]} — not on our list yet. Pick the closest block manually.`
+              : "Couldn't match your location to a covered block. Pick one manually.",
+        });
+      }
+    } catch (e: any) {
+      setLocMsg({ tone: 'err', text: e?.message || 'Location unavailable' });
+    } finally {
+      setLocating(false);
+    }
+  }
+
   const wa = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || '';
   const waHref = wa
     ? `https://wa.me/${wa}?text=${encodeURIComponent(
@@ -233,6 +265,39 @@ function PickStep({
           </button>
         )}
       </label>
+
+      {/* auto-detect via geolocation */}
+      <div className="mt-3">
+        <button
+          type="button"
+          onClick={detect}
+          disabled={locating}
+          className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full"
+          style={{
+            background: 'var(--ink)',
+            color: 'var(--bone)',
+            fontSize: 12,
+            letterSpacing: '0.14em',
+            textTransform: 'uppercase',
+            fontWeight: 500,
+            opacity: locating ? 0.6 : 1,
+          }}
+        >
+          {locating ? <Loader2 size={12} className="animate-spin" /> : <Crosshair size={12} />}
+          {locating ? 'Finding you…' : 'Use my location'}
+        </button>
+        {locMsg && (
+          <p
+            className="mt-2"
+            style={{
+              fontSize: 12,
+              color: locMsg.tone === 'ok' ? 'var(--sage)' : 'var(--terra-deep)',
+            }}
+          >
+            {locMsg.text}
+          </p>
+        )}
+      </div>
 
       {/* clusters */}
       <div className="mt-5 space-y-5">

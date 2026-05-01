@@ -51,7 +51,13 @@ type IncomingPayload = {
   delivery?: {
     method: DeliveryMethodId;
     area_id: DeliveryAreaId;
-    street: string;
+    /** Three explicit address components — match what the client gate
+     *  captures + what geolocation auto-fill populates. */
+    house_no?: string;
+    block_no?: string;
+    area_name?: string;
+    /** Composed string fallback; ignored if house_no is present. */
+    street?: string;
   };
   notes?: string | null;
   items: IncomingItem[];
@@ -174,6 +180,12 @@ async function handleOrder(req: Request) {
   const phone = normalisePhone(body?.customer?.phone || '');
   if (!name) return bad('Name is required');
   if (!phone) return bad('Phone is required');
+  // Strict format check: PK mobile = 12 digits, starts with 923. The client
+  // already validates with validatePkPhone(); this is defense-in-depth so
+  // direct API calls / older clients can't sneak through with junk numbers.
+  if (!/^923\d{9}$/.test(phone)) {
+    return bad('Phone must be a valid Pakistan mobile (e.g. 0300 1234567)');
+  }
   if (!Array.isArray(body.items) || body.items.length === 0) return bad('Cart is empty');
   if (body.items.length > 50) return bad('Too many items');
 
@@ -208,12 +220,22 @@ async function handleOrder(req: Request) {
       );
     }
 
-    const street = (body.delivery.street || '').trim().slice(0, 500);
-    if (!street) return bad('Street / house detail required');
+    // Prefer the new 3-field shape, fall back to the legacy `street` blob
+    // for any older client that hasn't been refreshed.
+    const houseNo  = (body.delivery.house_no  || '').trim().slice(0, 100);
+    const blockNo  = (body.delivery.block_no  || '').trim().slice(0, 60);
+    const areaNm   = (body.delivery.area_name || '').trim().slice(0, 80);
+    const legacy   = (body.delivery.street    || '').trim().slice(0, 500);
 
-    // Compose the single address string the admin sees: area first for quick routing,
-    // then the free-form street / landmark.
-    delivery_address = `${area.cluster} · ${area.label} — ${street}`;
+    if (houseNo || blockNo || areaNm) {
+      if (!houseNo) return bad('House no. required');
+      if (!blockNo) return bad('Block no. required');
+      if (!areaNm)  return bad('Area name required');
+      delivery_address = `${houseNo}, ${blockNo}, ${areaNm}`;
+    } else {
+      if (!legacy) return bad('Address required');
+      delivery_address = `${area.cluster} · ${area.label} — ${legacy}`;
+    }
   }
 
   // ── server-trusted Supabase client ──

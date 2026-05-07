@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>BRUE · order reel</title>
+<title>BRUE · order in 60 seconds</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link
-  href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700&display=swap"
+  href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Instrument+Serif:ital@0;1&family=Inter+Tight:wght@400;500;600;700;800&display=swap"
   rel="stylesheet"
 />
 <style>
@@ -16,9 +16,12 @@
   --terra-deep: #9a3419;
   --bone: #fcf7eb;
   --cream: #f3e8d2;
+  --paper: #faf3e2;
   --ink: #1c1712;
   --ink-soft: #3e352b;
   --ink-muted: #7a6c5d;
+  --line: rgba(28,23,18,0.1);
+  --line-strong: rgba(28,23,18,0.18);
   --sage: #6b7a53;
   --mustard: #d4972e;
 }
@@ -30,13 +33,15 @@ html, body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
-body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh;
+}
 .serif { font-family: 'Instrument Serif', serif; }
 .script { font-family: 'Caveat', cursive; }
 .ital { font-style: italic; }
 
-/* The "phone" — 9:16 IG-Reel canvas. Sized to fit any viewport via JS scaling.
-   Designed at 1080×1920 internal coords. */
+/* ─── 9:16 IG-Reel canvas ─────────────────────────────────── */
 .stage {
   position: relative;
   width: 1080px;
@@ -48,224 +53,257 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
 .grain::after {
   content: '';
   position: absolute; inset: 0;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='240' height='240'><filter id='n'><feTurbulence baseFrequency='0.9' numOctaves='2' seed='7'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.16 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
   mix-blend-mode: multiply;
-  opacity: 0.55;
+  opacity: 0.5;
   pointer-events: none;
   z-index: 999;
+}
+
+/* ─── PROGRESS BAR ────────────────────────────────────────── */
+.progress {
+  position: absolute; top: 0; left: 0; height: 8px;
+  background: var(--terra);
+  width: 0;
+  z-index: 1000;
+  box-shadow: 0 0 12px rgba(196,69,38,0.6);
+}
+
+/* ─── BRAND BAR ──────────────────────────────────────────── */
+.brand-bar {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  padding: 28px 60px;
+  display: flex; align-items: center; justify-content: space-between;
+  font-family: 'Instrument Serif', serif;
+  z-index: 50;
+}
+.brand-bar .logo { font-size: 44px; color: var(--ink); }
+.brand-bar .url {
+  font-size: 20px; color: var(--ink-soft);
+  letter-spacing: 0.18em; text-transform: uppercase;
 }
 
 /* ─── SCENES ─────────────────────────────────────────────── */
 .scene {
   position: absolute; inset: 0;
   opacity: 0;
-  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  transform: scale(1.04);
+  transition: opacity 0.18s ease-out, transform 0.18s ease-out;
+}
+.scene.show {
+  opacity: 1;
+  transform: scale(1);
 }
 
-/* Total: 18s loop. Each scene rises in / out with overlap. */
-@keyframes scene1 { 0%,11.1%{opacity:1} 13.9%,100%{opacity:0} }
-@keyframes scene2 { 0%,11.1%{opacity:0} 13.9%,27.7%{opacity:1} 30.5%,100%{opacity:0} }
-@keyframes scene3 { 0%,27.7%{opacity:0} 30.5%,44.4%{opacity:1} 47.2%,100%{opacity:0} }
-@keyframes scene4 { 0%,44.4%{opacity:0} 47.2%,61.1%{opacity:1} 63.8%,100%{opacity:0} }
-@keyframes scene5 { 0%,61.1%{opacity:0} 63.8%,80.5%{opacity:1} 83.3%,100%{opacity:0} }
-@keyframes scene6 { 0%,80.5%{opacity:0} 83.3%,100%{opacity:1} }
-
-.s1 { animation: scene1 18s linear infinite; }
-.s2 { animation: scene2 18s linear infinite; }
-.s3 { animation: scene3 18s linear infinite; }
-.s4 { animation: scene4 18s linear infinite; }
-.s5 { animation: scene5 18s linear infinite; }
-.s6 { animation: scene6 18s linear infinite; }
+/* Image fallback — colored block while img loads / if it fails. So
+ * the timing of the reel never depends on network. */
+.imgwrap {
+  position: relative;
+  background: var(--cream);
+  overflow: hidden;
+}
+.imgwrap img {
+  width: 100%; height: 100%; object-fit: cover; display: block;
+}
 
 /* ─── 1: COLD OPEN ────────────────────────────────────────── */
-.open-bg {
+.s1 .open-bg {
   position: absolute; inset: 0;
   background:
-    radial-gradient(120% 80% at 50% 120%, rgba(168,28,63,0.28), transparent 60%),
+    radial-gradient(120% 80% at 50% 120%, rgba(168,28,63,0.35), transparent 60%),
     linear-gradient(178deg, #d95a3b 0%, #c44526 58%, #9a3419 100%);
 }
-.open-wrap { position: relative; text-align: center; color: var(--bone); padding: 0 80px; }
-.open-eyebrow {
-  font-size: 32px; letter-spacing: 0.32em; text-transform: uppercase;
-  font-weight: 600; opacity: 0.85;
-}
-.open-title {
-  font-family: 'Instrument Serif', serif;
-  font-size: 240px; line-height: 0.9; letter-spacing: -0.02em;
-  margin-top: 28px;
-}
-.open-title .word { display: inline-block; opacity: 0; transform: translateY(40px); }
-.s1 .open-title .word:nth-child(1) { animation: word-in 0.6s cubic-bezier(.2,.7,.3,1) 0.1s forwards; }
-.s1 .open-title .word:nth-child(2) { animation: word-in 0.6s cubic-bezier(.2,.7,.3,1) 0.5s forwards; }
-.s1 .open-title .word:nth-child(3) { animation: word-in 0.6s cubic-bezier(.2,.7,.3,1) 0.9s forwards; }
-@keyframes word-in { to { opacity: 1; transform: translateY(0); } }
-.open-tagline {
-  margin-top: 56px; font-family: 'Caveat', cursive; font-size: 78px;
-  color: #fadfca; transform: rotate(-3deg);
-  opacity: 0; animation: word-in 0.6s ease 1.4s forwards;
-}
-.open-mark {
+.s1 .open-mark {
   position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
   font-family: 'Instrument Serif', serif; font-size: 56px;
-  letter-spacing: 0.04em; color: var(--bone); opacity: 0.9;
+  letter-spacing: 0.04em; color: var(--bone);
+}
+.s1 .open-wrap {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; color: var(--bone); padding: 0 80px;
+}
+.s1 .open-eyebrow {
+  font-size: 28px; letter-spacing: 0.32em; text-transform: uppercase;
+  font-weight: 700; opacity: 0.92; margin-bottom: 28px;
+}
+.s1 .open-title {
+  font-family: 'Instrument Serif', serif;
+  font-size: 260px; line-height: 0.86; letter-spacing: -0.03em;
+}
+.s1 .open-tagline {
+  margin-top: 56px; font-family: 'Caveat', cursive; font-size: 84px;
+  color: #fadfca; transform: rotate(-3deg);
+}
+.s1 .open-pulse {
+  position: absolute; top: 50%; left: 50%;
+  width: 1400px; height: 1400px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(252,247,235,0.16), transparent 60%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
 }
 
-/* ─── shared device chrome (status bar / nav bar look) ──── */
-.device-bg { position: absolute; inset: 0; background: var(--paper, var(--bone)); }
+/* ─── shared title block ─── */
 .title-block {
-  position: absolute; top: 90px; left: 80px; right: 80px; z-index: 10;
+  position: absolute; top: 110px; left: 80px; right: 80px; z-index: 10;
 }
 .title-block .pill {
-  display: inline-block; padding: 14px 24px; border-radius: 999px;
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 14px 26px; border-radius: 999px;
   background: var(--ink); color: var(--bone);
   font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase;
-  font-weight: 600;
+  font-weight: 700;
+}
+.title-block .pill.terra { background: var(--terra); }
+.title-block .pill .dot {
+  width: 8px; height: 8px; border-radius: 999px;
+  background: var(--mustard);
 }
 .title-block h2 {
-  font-family: 'Instrument Serif', serif; font-size: 120px;
-  line-height: 0.95; letter-spacing: -0.02em; margin-top: 30px;
+  font-family: 'Instrument Serif', serif; font-size: 130px;
+  line-height: 0.92; letter-spacing: -0.025em; margin-top: 30px;
   color: var(--ink);
 }
 .title-block h2 .ital { color: var(--terra); }
 
 /* ─── 2: MENU GRID + TAP ──────────────────────────────────── */
-.s2 { background: var(--paper, var(--bone)); }
+.s2 { background: var(--paper); }
 .menu-grid {
   position: absolute;
-  top: 540px; left: 80px; right: 80px;
+  top: 580px; left: 80px; right: 80px;
   display: grid; grid-template-columns: 1fr 1fr; gap: 36px;
 }
 .card {
   background: var(--cream); border-radius: 28px;
-  aspect-ratio: 1 / 1; position: relative; overflow: hidden;
+  position: relative; overflow: hidden;
   box-shadow: 0 30px 60px -28px rgba(28,23,18,0.22);
 }
-.card .label {
-  position: absolute; left: 24px; right: 24px; bottom: 24px;
+.card .imgwrap { aspect-ratio: 1 / 1; }
+.card .meta {
+  padding: 22px 24px 26px;
   display: flex; align-items: baseline; justify-content: space-between;
-  color: var(--bone); font-family: 'Instrument Serif', serif;
+  background: var(--bone);
 }
-.card .label .name { font-size: 36px; letter-spacing: -0.01em; }
-.card .label .price { font-size: 26px; opacity: 0.9; }
-.card.c1 { background: linear-gradient(160deg, #d95a3b, #9a3419); }
-.card.c2 { background: linear-gradient(160deg, #6b7a53, #3d4b28); }
-.card.c3 { background: linear-gradient(160deg, #d4972e, #7a560f); }
-.card.c4 { background: linear-gradient(160deg, #c46674, #8c2e44); }
+.card .name {
+  font-family: 'Instrument Serif', serif; font-size: 30px;
+  letter-spacing: -0.01em; color: var(--ink);
+  line-height: 1.05;
+}
+.card .price {
+  font-family: 'Instrument Serif', serif; font-size: 26px;
+  color: var(--terra);
+}
+/* Highlighted card the tap lands on */
+.card.highlight {
+  outline: 5px solid var(--terra);
+  outline-offset: 4px;
+  transform: scale(1.05);
+  transition: transform 0.25s cubic-bezier(.2,.7,.3,1);
+  z-index: 5;
+}
 
+/* tap indicator */
 .tap {
-  position: absolute; width: 96px; height: 96px;
+  position: absolute; width: 130px; height: 130px;
   border-radius: 999px;
-  background: rgba(252,247,235,0.6);
-  border: 4px solid var(--bone);
+  background: rgba(252,247,235,0.85);
+  border: 6px solid var(--bone);
   pointer-events: none; z-index: 30;
+  box-shadow: 0 18px 50px rgba(28,23,18,0.55);
 }
-.tap::after {
-  content: ''; position: absolute; inset: -2px;
-  border-radius: 999px; border: 4px solid var(--terra);
-  animation: tap-ripple 1.2s ease-out infinite;
+.tap-ring {
+  position: absolute; inset: -6px;
+  border-radius: 999px; border: 6px solid var(--terra);
 }
-@keyframes tap-ripple {
-  0% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(2.2); opacity: 0; }
-}
-
-.s2 .tap {
-  top: 720px; left: 220px;
-  opacity: 0;
-  animation: tap-show 18s linear infinite;
-}
-@keyframes tap-show {
-  0%, 16.6% { opacity: 0; }
-  18%, 26% { opacity: 1; }
-  27%, 100% { opacity: 0; }
+.tap.scale-on .tap-ring {
+  transform: scale(2.4); opacity: 0;
+  transition: transform .55s, opacity .55s;
 }
 
 /* ─── 3: DETAIL MODAL ─────────────────────────────────────── */
-.s3 { background: rgba(28,23,18,0.55); }
+.s3 .scrim {
+  position: absolute; inset: 0;
+  background: rgba(28,23,18,0.65);
+}
 .modal {
-  position: absolute; left: 60px; right: 60px; top: 280px;
+  position: absolute; left: 60px; right: 60px; top: 220px;
   background: var(--bone); border-radius: 44px;
-  padding: 0;
   box-shadow: 0 -50px 120px -30px rgba(28,23,18,0.6);
   overflow: hidden;
-  transform: translateY(120px);
-  opacity: 0;
 }
-.s3 .modal { animation: modal-in 0.55s cubic-bezier(.2,.7,.3,1) 0.2s forwards; }
-@keyframes modal-in { to { transform: translateY(0); opacity: 1; } }
-
-.modal .hero {
-  background: linear-gradient(160deg, #d95a3b, #9a3419);
-  height: 700px; display: flex; align-items: flex-end; justify-content: center;
-  padding-bottom: 40px;
-}
-.modal .hero .name {
-  font-family: 'Instrument Serif', serif; color: var(--bone);
-  font-size: 80px; line-height: 1; text-align: center;
-}
-.modal .body {
-  padding: 50px 56px;
+.modal .imgwrap { aspect-ratio: 1 / 1; }
+.modal .body { padding: 50px 56px 0; }
+.modal .cat {
+  font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--ink-muted); font-weight: 700;
+  display: inline-flex; align-items: center; gap: 10px;
 }
 .modal .row {
   display: flex; align-items: baseline; justify-content: space-between;
-  margin-bottom: 26px;
+  margin-top: 22px;
 }
-.modal .cat {
-  font-size: 22px; letter-spacing: 0.2em; text-transform: uppercase;
-  color: var(--ink-muted); font-weight: 600;
+.modal .name {
+  font-family: 'Instrument Serif', serif; font-size: 84px;
+  line-height: 1; letter-spacing: -0.02em;
 }
 .modal .price {
-  font-family: 'Instrument Serif', serif; font-size: 64px;
-  color: var(--terra);
+  font-family: 'Instrument Serif', serif; font-size: 56px;
+  color: var(--terra); white-space: nowrap;
 }
 .modal .desc {
-  color: var(--ink-soft); font-size: 30px; line-height: 1.45;
+  color: var(--ink-soft); font-size: 26px; line-height: 1.45;
+  margin-top: 24px;
+}
+.modal .footer {
+  margin-top: 44px; padding: 32px 56px 50px;
+  border-top: 1px solid var(--line);
+  display: flex; align-items: center; gap: 22px;
+}
+.modal .qty {
+  border: 2px solid var(--line-strong); border-radius: 999px;
+  padding: 14px 22px;
+  display: flex; align-items: center; gap: 18px;
+  font-family: 'Instrument Serif', serif; font-size: 32px;
 }
 .modal .cta {
-  margin: 50px 56px; padding: 30px;
+  flex: 1; padding: 28px;
   background: var(--terra); color: var(--bone);
-  font-size: 36px; font-weight: 600;
+  font-size: 32px; font-weight: 700;
   border-radius: 999px;
   text-align: center; letter-spacing: 0.02em;
 }
 
-.s3 .tap { top: 1480px; left: 50%; transform: translateX(-50%); }
-.s3 .tap { opacity: 0; animation: tap-show3 18s linear infinite; }
-@keyframes tap-show3 {
-  0%, 35% { opacity: 0; }
-  37%, 44% { opacity: 1; }
-  45%, 100% { opacity: 0; }
-}
-
-/* ─── 4: PAYMENT METHOD PICKER ────────────────────────────── */
-.s4 { background: var(--paper, var(--bone)); }
-.s4 .title-block h2 { font-size: 110px; }
+/* ─── 4: PAYMENT METHOD ───────────────────────────────────── */
+.s4 { background: var(--paper); }
 .pay-banner {
   position: absolute; top: 540px; left: 80px; right: 80px;
   background: var(--ink); color: var(--bone);
-  border-radius: 36px; padding: 50px;
+  border-radius: 36px; padding: 44px;
   text-align: center;
 }
 .pay-banner .lbl {
   font-size: 22px; letter-spacing: 0.22em; text-transform: uppercase;
-  opacity: 0.7; margin-bottom: 12px;
+  opacity: 0.7; margin-bottom: 12px; font-weight: 700;
 }
 .pay-banner .amt {
   font-family: 'Instrument Serif', serif;
-  font-size: 130px; color: var(--mustard); letter-spacing: -0.02em;
+  font-size: 140px; color: var(--mustard); letter-spacing: -0.03em;
+  line-height: 1;
 }
 .pay-banner .note {
-  margin-top: 14px; font-size: 22px; opacity: 0.6;
+  margin-top: 14px; font-size: 20px; opacity: 0.6;
   letter-spacing: 0.16em; text-transform: uppercase;
 }
 .methods {
   position: absolute; top: 1010px; left: 80px; right: 80px;
-  display: grid; gap: 24px;
+  display: grid; gap: 22px;
 }
 .method {
   display: flex; align-items: center; gap: 26px;
-  background: var(--bone); border: 2px solid rgba(28,23,18,0.18);
-  border-radius: 28px; padding: 30px 36px;
+  background: var(--bone); border: 2px solid var(--line-strong);
+  border-radius: 28px; padding: 30px 34px;
 }
 .method .icon {
   width: 72px; height: 72px; border-radius: 999px;
@@ -274,74 +312,90 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
   font-size: 38px;
 }
 .method .name {
-  font-family: 'Instrument Serif', serif; font-size: 48px;
+  font-family: 'Instrument Serif', serif; font-size: 44px;
+  line-height: 1.05;
 }
-.method .sub { font-size: 22px; color: var(--ink-muted); margin-top: 4px; letter-spacing: 0.04em; }
+.method .sub {
+  font-size: 20px; color: var(--ink-muted); margin-top: 4px;
+  letter-spacing: 0.04em;
+}
+.method .radio {
+  width: 28px; height: 28px; border-radius: 999px;
+  border: 2px solid var(--line-strong); margin-left: auto;
+}
 .method.active {
   border-color: var(--terra);
   background: rgba(196,69,38,0.06);
+  transform: scale(1.02);
+  transition: transform 0.2s;
 }
 .method.active .icon { background: var(--terra); color: var(--bone); }
+.method.active .radio {
+  background: var(--terra);
+  box-shadow: inset 0 0 0 5px var(--bone);
+}
 
-/* ─── 5: QR + DETAILS ─────────────────────────────────────── */
-.s5 { background: var(--paper, var(--bone)); }
+/* ─── 5: QR + IBAN ───────────────────────────────────────── */
+.s5 { background: var(--paper); }
 .qr-card {
-  position: absolute; top: 280px; left: 60px; right: 60px;
-  background: var(--cream); border-radius: 44px; padding: 56px;
-  border: 2px solid rgba(28,23,18,0.18);
+  position: absolute; top: 220px; left: 60px; right: 60px;
+  background: var(--cream); border-radius: 44px; padding: 48px;
+  border: 2px solid var(--line-strong);
 }
 .qr-eyebrow {
   font-size: 22px; letter-spacing: 0.22em; text-transform: uppercase;
-  color: var(--ink-muted); font-weight: 600; margin-bottom: 18px;
+  color: var(--ink-muted); font-weight: 700; margin-bottom: 14px;
 }
 .qr-amount {
-  font-family: 'Instrument Serif', serif; font-size: 96px;
-  color: var(--terra); margin-bottom: 36px; letter-spacing: -0.02em;
+  font-family: 'Instrument Serif', serif; font-size: 92px;
+  color: var(--terra); margin-bottom: 32px; letter-spacing: -0.02em;
+  line-height: 1;
 }
 .qr-frame {
-  background: var(--bone); border-radius: 36px; padding: 40px;
+  background: var(--bone); border-radius: 32px; padding: 32px;
   margin: 0 auto; width: fit-content;
-  border: 2px solid rgba(28,23,18,0.1);
+  border: 2px solid var(--line);
 }
 .qr-img {
-  width: 480px; height: 480px; display: block;
+  width: 460px; height: 460px; display: block;
+  background: var(--cream);
 }
 .iban-row {
-  margin-top: 40px;
-  background: var(--bone); border-radius: 24px;
-  border: 2px solid rgba(28,23,18,0.1);
-  padding: 28px 32px;
+  margin-top: 36px;
+  background: var(--bone); border-radius: 22px;
+  border: 2px solid var(--line);
+  padding: 24px 28px;
   display: flex; align-items: center; justify-content: space-between; gap: 16px;
 }
 .iban-row .lbl {
-  font-size: 18px; letter-spacing: 0.22em; text-transform: uppercase;
-  color: var(--ink-muted); font-weight: 600;
+  font-size: 16px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--ink-muted); font-weight: 700;
 }
 .iban-row .val {
-  font-family: ui-monospace, Menlo, monospace; font-size: 30px; margin-top: 4px;
+  font-family: ui-monospace, Menlo, monospace; font-size: 28px; margin-top: 6px;
   letter-spacing: 0.02em;
 }
 .copy-pill {
-  background: var(--cream); border: 2px solid rgba(28,23,18,0.18);
-  width: 80px; height: 80px; border-radius: 18px;
+  background: var(--cream); border: 2px solid var(--line-strong);
+  width: 70px; height: 70px; border-radius: 16px;
   display: flex; align-items: center; justify-content: center;
-  font-size: 32px;
+  font-size: 28px;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+.copy-pill.copied {
+  background: var(--sage); color: var(--bone); border-color: var(--sage);
+  transform: scale(1.1);
 }
 .confirm-btn {
   position: absolute; left: 80px; right: 80px; bottom: 200px;
   background: var(--terra); color: var(--bone);
-  text-align: center; padding: 44px;
-  border-radius: 999px; font-size: 42px; font-weight: 600;
-}
-.s5 .tap { top: 1640px; left: 50%; transform: translateX(-50%); }
-.s5 .tap { opacity: 0; animation: tap-show5 18s linear infinite; }
-@keyframes tap-show5 {
-  0%, 75% { opacity: 0; }
-  77%, 82% { opacity: 1; }
-  83%, 100% { opacity: 0; }
+  text-align: center; padding: 38px;
+  border-radius: 999px; font-size: 38px; font-weight: 700;
+  box-shadow: 0 24px 50px -20px rgba(196,69,38,0.55);
 }
 
-/* ─── 6: CONFIRM + WHATSAPP + BYKEA/INDRIVE ───────────────── */
+/* ─── 6: CONFIRM + WHATSAPP + BYKEA / INDRIVE ─────────────── */
 .s6 {
   background:
     radial-gradient(120% 80% at 50% 0%, rgba(168,28,63,0.18), transparent 60%),
@@ -350,8 +404,8 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
 .confirm-wrap {
   position: absolute; inset: 0;
   display: flex; flex-direction: column; align-items: center;
-  padding: 280px 80px 80px;
-  gap: 48px;
+  padding: 240px 80px 200px;
+  gap: 36px;
   text-align: center;
 }
 .tick {
@@ -362,150 +416,149 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
 }
 .confirm-wrap h2 {
   font-family: 'Instrument Serif', serif;
-  font-size: 130px; line-height: 0.92; letter-spacing: -0.02em;
+  font-size: 140px; line-height: 0.92; letter-spacing: -0.025em;
 }
 .confirm-wrap h2 .ital { color: var(--terra); }
 .paid-chip {
-  display: inline-flex; align-items: center; gap: 14px;
+  display: inline-flex; align-items: center; gap: 12px;
   background: rgba(107,122,83,0.18); color: var(--sage);
-  padding: 16px 28px; border-radius: 999px;
-  font-size: 22px; letter-spacing: 0.18em; text-transform: uppercase;
-  font-weight: 600;
+  padding: 14px 26px; border-radius: 999px;
+  font-size: 20px; letter-spacing: 0.18em; text-transform: uppercase;
+  font-weight: 700;
 }
 .actions {
   display: flex; flex-direction: column; gap: 22px;
   align-items: stretch; width: 100%;
+  margin-top: 14px;
 }
 .btn-wa {
   background: #25D366; color: white;
-  padding: 38px; border-radius: 999px;
-  font-size: 36px; font-weight: 600;
+  padding: 36px; border-radius: 999px;
+  font-size: 34px; font-weight: 700;
   display: flex; align-items: center; justify-content: center; gap: 18px;
+  box-shadow: 0 24px 50px -20px rgba(37,211,102,0.55);
+  transition: transform .2s, box-shadow .2s;
+}
+.btn-wa.pulse {
+  transform: scale(1.06);
+  box-shadow: 0 0 0 36px rgba(37,211,102,0.32),
+              0 28px 50px -20px rgba(37,211,102,0.7);
+}
+.delivery-script {
+  font-family: 'Caveat', cursive; font-size: 64px;
+  color: var(--terra); transform: rotate(-2deg);
 }
 .delivery-row {
   display: grid; grid-template-columns: 1fr 1fr; gap: 22px;
-  margin-top: 8px;
 }
 .delivery-pill {
-  background: var(--bone); border: 2px solid rgba(28,23,18,0.18);
-  padding: 32px 24px; border-radius: 28px;
+  background: var(--bone); border: 2px solid var(--line-strong);
+  padding: 30px 24px; border-radius: 28px;
   font-family: 'Instrument Serif', serif; font-size: 44px;
   text-align: center;
+  transition: transform .2s, box-shadow .2s;
 }
 .delivery-pill.bykea { background: var(--ink); color: var(--bone); border-color: var(--ink); }
-.delivery-script {
-  font-family: 'Caveat', cursive; font-size: 60px;
-  color: var(--terra); transform: rotate(-2deg);
-  margin-top: 8px;
+.delivery-pill.pulse {
+  transform: scale(1.08);
+  box-shadow: 0 24px 50px -20px rgba(196,69,38,0.55);
+  border-color: var(--terra);
 }
 
-/* Highlights — pulse on the WhatsApp & Bykea/inDrive parts at the right time */
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(37,211,102,0); }
-  50% { box-shadow: 0 0 0 24px rgba(37,211,102,0.4); }
-}
-.s6 .btn-wa {
-  animation: wa-glow 18s linear infinite;
-}
-@keyframes wa-glow {
-  0%, 88% { box-shadow: 0 24px 50px -20px rgba(37,211,102,0.45); }
-  90%, 94% { box-shadow: 0 0 0 28px rgba(37,211,102,0.45); }
-  96%, 100% { box-shadow: 0 24px 50px -20px rgba(37,211,102,0.45); }
-}
-.s6 .delivery-pill {
-  animation: del-glow 18s linear infinite;
-}
-@keyframes del-glow {
-  0%, 96% { transform: scale(1); }
-  98% { transform: scale(1.06); }
-  100% { transform: scale(1); }
-}
-
-/* ─── PROGRESS BAR (top of every scene except cold-open) ── */
-.progress {
-  position: absolute; top: 0; left: 0; height: 8px; background: var(--terra);
-  width: 0;
-  animation: progress 18s linear infinite;
-  z-index: 20;
-}
-@keyframes progress { to { width: 100%; } }
-
-/* ─── BRAND BAR (always visible bottom) ───────────────────── */
-.brand-bar {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 30px 60px;
-  display: flex; align-items: center; justify-content: space-between;
+/* ─── LOADER ─────────────────────────────────────────────── */
+#loader {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgba(168,28,63,0.35), transparent 60%),
+    linear-gradient(178deg, #d95a3b 0%, #c44526 58%, #9a3419 100%);
+  color: var(--bone);
+  z-index: 2000;
   font-family: 'Instrument Serif', serif;
-  z-index: 25;
+  font-size: 80px;
+  letter-spacing: -0.02em;
+  transition: opacity .4s ease-out;
 }
-.brand-bar .logo { font-size: 48px; color: var(--ink); }
-.brand-bar .url { font-size: 22px; color: var(--ink-soft); letter-spacing: 0.16em; }
-
-/* Scaling — fit stage to viewport while preserving 9:16 */
+#loader.hide { opacity: 0; pointer-events: none; }
 </style>
 </head>
 <body>
   <div class="stage" id="stage">
-    <!-- progress -->
-    <div class="progress"></div>
+    <div id="loader">brue</div>
+    <div class="progress" id="progress"></div>
 
     <!-- ═══ 1. COLD OPEN ═══ -->
-    <section class="scene s1 grain">
+    <section class="scene s1 grain" data-scene="1">
       <div class="open-bg"></div>
+      <div class="open-pulse"></div>
       <div class="open-mark">brue</div>
       <div class="open-wrap">
         <div class="open-eyebrow">Karachi · Cold · Coffee</div>
-        <h1 class="open-title">
-          <span class="word">Tap.</span>
-          <span class="word ital">Pay.</span>
-          <span class="word">Brewed.</span>
-        </h1>
-        <div class="open-tagline">order in 60 seconds ✿</div>
+        <div class="open-title" id="openTitle"></div>
+        <div class="open-tagline" id="openTag"></div>
       </div>
     </section>
 
-    <!-- ═══ 2. MENU GRID + TAP ═══ -->
-    <section class="scene s2 grain">
-      <div class="device-bg"></div>
+    <!-- ═══ 2. MENU GRID ═══ -->
+    <section class="scene s2 grain" data-scene="2">
       <div class="title-block">
-        <span class="pill">Step 1 · Pick a drink</span>
-        <h2>Tap any <span class="ital">card</span>.</h2>
+        <span class="pill"><span class="dot"></span>Step 1 · pick a drink</span>
+        <h2>Tap your<br/><span class="ital">drink</span>.</h2>
       </div>
       <div class="menu-grid">
-        <div class="card c1"><div class="label"><span class="name">Espresso<br/>Tonic</span><span class="price">720</span></div></div>
-        <div class="card c2"><div class="label"><span class="name">Mint<br/>Lemonade</span><span class="price">540</span></div></div>
-        <div class="card c3"><div class="label"><span class="name">Caramel<br/>Frappe</span><span class="price">820</span></div></div>
-        <div class="card c4"><div class="label"><span class="name">Strawberry<br/>Mocha</span><span class="price">660</span></div></div>
+        <div class="card" id="card-tonic">
+          <div class="imgwrap"><img src="/drinks/espresso-tonic.jpg" alt="Espresso Tonic" /></div>
+          <div class="meta"><span class="name">Espresso<br/>Tonic</span><span class="price">720</span></div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/drinks/strawberry-mocha.jpg" alt="Strawberry Mocha" /></div>
+          <div class="meta"><span class="name">Strawberry<br/>Mocha</span><span class="price">660</span></div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/drinks/mint-lemonade.jpg" alt="Mint Lemonade" /></div>
+          <div class="meta"><span class="name">Mint<br/>Lemonade</span><span class="price">540</span></div>
+        </div>
+        <div class="card">
+          <div class="imgwrap"><img src="/drinks/caramel-frappe.jpg" alt="Caramel Frappe" /></div>
+          <div class="meta"><span class="name">Caramel<br/>Frappe</span><span class="price">820</span></div>
+        </div>
       </div>
-      <div class="tap"></div>
+      <div class="tap" id="s2-tap" style="top: 730px; left: 200px;">
+        <div class="tap-ring"></div>
+      </div>
       <div class="brand-bar"><span class="logo">brue</span><span class="url">bruecoffeepk.com</span></div>
     </section>
 
     <!-- ═══ 3. DETAIL MODAL ═══ -->
-    <section class="scene s3 grain">
-      <div class="device-bg"></div>
+    <section class="scene s3 grain" data-scene="3">
+      <div class="scrim"></div>
       <div class="modal">
-        <div class="hero">
-          <div class="name">Espresso<br/>Tonic</div>
+        <div class="imgwrap">
+          <img src="/drinks/espresso-tonic.jpg" alt="Espresso Tonic" />
         </div>
         <div class="body">
+          <span class="cat">✨ New Recipe</span>
           <div class="row">
-            <span class="cat">New Recipe</span>
+            <span class="name">Espresso<br/>Tonic</span>
             <span class="price">PKR 720</span>
           </div>
           <p class="desc">Espresso tonic bomb over ice — sparkling, citrusy, served cold.</p>
         </div>
-        <div class="cta">Add — PKR 720 ↗</div>
+        <div class="footer">
+          <div class="qty">− 1 +</div>
+          <div class="cta">Add — PKR 720 ↗</div>
+        </div>
       </div>
-      <div class="tap"></div>
+      <div class="tap" id="s3-tap" style="bottom: 320px; right: 100px;">
+        <div class="tap-ring"></div>
+      </div>
     </section>
 
     <!-- ═══ 4. PAYMENT METHOD ═══ -->
-    <section class="scene s4 grain">
-      <div class="device-bg"></div>
+    <section class="scene s4 grain" data-scene="4">
       <div class="title-block">
-        <span class="pill" style="background: var(--terra)">Step 2 · Pay first</span>
-        <h2>Online<br/>only — <span class="ital">no COD</span>.</h2>
+        <span class="pill terra"><span class="dot" style="background: var(--bone);"></span>Step 2 · pay first</span>
+        <h2>Online —<br/><span class="ital">no COD</span>.</h2>
       </div>
       <div class="pay-banner">
         <div class="lbl">Pay this amount</div>
@@ -513,55 +566,66 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
         <div class="note">Faysal · NayaPay · Sadapay · JazzCash</div>
       </div>
       <div class="methods">
-        <div class="method active">
+        <div class="method active" id="m-faysal">
           <div class="icon">🏦</div>
           <div><div class="name">Faysal Bank</div><div class="sub">IBFT · scan or transfer</div></div>
+          <div class="radio"></div>
         </div>
         <div class="method">
           <div class="icon">💳</div>
           <div><div class="name">NayaPay</div><div class="sub">Send via the app</div></div>
+          <div class="radio"></div>
         </div>
+        <div class="method">
+          <div class="icon">📱</div>
+          <div><div class="name">JazzCash</div><div class="sub">Send via the app</div></div>
+          <div class="radio"></div>
+        </div>
+      </div>
+      <div class="tap" id="s4-tap" style="top: 1050px; left: 540px;">
+        <div class="tap-ring"></div>
       </div>
       <div class="brand-bar"><span class="logo">brue</span><span class="url">bruecoffeepk.com</span></div>
     </section>
 
-    <!-- ═══ 5. QR + DETAILS ═══ -->
-    <section class="scene s5 grain">
-      <div class="device-bg"></div>
+    <!-- ═══ 5. QR + IBAN ═══ -->
+    <section class="scene s5 grain" data-scene="5">
       <div class="qr-card">
-        <div class="qr-eyebrow">Faysal Bank · IBFT</div>
+        <div class="qr-eyebrow">🏦 Faysal Bank · IBFT</div>
         <div class="qr-amount">Send PKR 720</div>
         <div class="qr-frame">
           <img class="qr-img" src="/payment/faysal-bank-qr.jpg" alt="Faysal Bank QR" />
         </div>
         <div class="iban-row">
           <div>
-            <div class="lbl">IBAN</div>
-            <div class="val">PK03 FAYS 3066 …</div>
+            <div class="lbl">IBAN · BRUE COFFEE STUDIO</div>
+            <div class="val">PK03 FAYS 3066 3010 0000 7502</div>
           </div>
-          <div class="copy-pill">⧉</div>
+          <div class="copy-pill" id="copy-pill">⧉</div>
         </div>
       </div>
       <div class="confirm-btn">I&apos;ve paid — confirm ↗</div>
-      <div class="tap"></div>
+      <div class="tap" id="s5-tap" style="bottom: 230px; left: 50%; margin-left: -65px;">
+        <div class="tap-ring"></div>
+      </div>
       <div class="brand-bar"><span class="logo">brue</span><span class="url">bruecoffeepk.com</span></div>
     </section>
 
-    <!-- ═══ 6. CONFIRMED + WHATSAPP + BYKEA/INDRIVE ═══ -->
-    <section class="scene s6 grain">
+    <!-- ═══ 6. CONFIRMED ═══ -->
+    <section class="scene s6 grain" data-scene="6">
       <div class="confirm-wrap">
         <div class="tick">✓</div>
         <h2>Order <span class="ital">in</span>.</h2>
         <div class="paid-chip">✓ Paid via Faysal Bank</div>
         <div class="actions">
-          <div class="btn-wa">
-            <span style="font-size: 44px;">📱</span>
+          <div class="btn-wa" id="btn-wa">
+            <span style="font-size: 40px;">💬</span>
             Confirm on WhatsApp ↗
           </div>
           <div class="delivery-script">we&apos;ll send it via ↓</div>
           <div class="delivery-row">
-            <div class="delivery-pill bykea">🛵 Bykea</div>
-            <div class="delivery-pill">🛵 inDrive</div>
+            <div class="delivery-pill bykea" id="del-bykea">🛵 Bykea</div>
+            <div class="delivery-pill" id="del-indrive">🛵 inDrive</div>
           </div>
         </div>
       </div>
@@ -570,7 +634,161 @@ body { display: flex; align-items: center; justify-content: center; min-height: 
   </div>
 
 <script>
-// Scale the 1080×1920 stage to fit any viewport while preserving aspect ratio.
+// ═══ TIGHT 16-SECOND TIMELINE — buzzy, short cuts ═══
+//   s1: 0.0  – 2.2   cold open
+//   s2: 2.2  – 5.0   tap your drink (Espresso Tonic highlights @ 3.5, taps @ 4.2)
+//   s3: 5.0  – 8.0   detail modal + Add tap
+//   s4: 8.0  – 10.5  payment methods (Faysal already active)
+//   s5: 10.5 – 13.5  QR + IBAN copy + confirm tap
+//   s6: 13.5 – 16.0  confirmed + WhatsApp + Bykea/inDrive pulse
+const SCENES = [
+  { id: 1, start: 0.0,  end: 2.2  },
+  { id: 2, start: 2.2,  end: 5.0  },
+  { id: 3, start: 5.0,  end: 8.0  },
+  { id: 4, start: 8.0,  end: 10.5 },
+  { id: 5, start: 10.5, end: 13.5 },
+  { id: 6, start: 13.5, end: 16.0 },
+];
+const TOTAL = 16;
+
+const OPEN_WORDS = ['Tap.', 'Pay.', 'Brewed.'];
+const OPEN_WORD_T = [0.05, 0.4, 0.75];
+const OPEN_TAG_T = 1.2;
+
+function setT(t) {
+  document.getElementById('progress').style.width = ((t / TOTAL) * 100) + '%';
+
+  for (const s of SCENES) {
+    const el = document.querySelector(`.s${s.id}`);
+    if (!el) continue;
+    el.classList.toggle('show', t >= s.start && t < s.end);
+  }
+
+  // ── S1 — words snap in
+  if (t < 2.4) {
+    const titleEl = document.getElementById('openTitle');
+    let html = '';
+    OPEN_WORDS.forEach((w, i) => {
+      const visible = t >= OPEN_WORD_T[i];
+      const ital = i === 1 ? 'ital' : '';
+      html += `<span class="${ital}" style="display:inline-block;opacity:${visible?1:0};transform:translateY(${visible?0:30}px) scale(${visible?1:0.92});transition:all .25s cubic-bezier(.2,.7,.3,1)"> ${w}</span>`;
+    });
+    titleEl.innerHTML = html;
+    const tag = document.getElementById('openTag');
+    tag.textContent = 'order in 60 seconds ✿';
+    tag.style.opacity = t >= OPEN_TAG_T ? 1 : 0;
+    tag.style.transform = `rotate(-3deg) scale(${t >= OPEN_TAG_T ? 1 : 0.8})`;
+    tag.style.transition = 'all .35s cubic-bezier(.2,.7,.3,1)';
+  }
+
+  // ── S2 — Espresso Tonic card highlights, then tap
+  const cardTonic = document.getElementById('card-tonic');
+  const tap2 = document.getElementById('s2-tap');
+  if (t >= 3.4 && t < 5.0) {
+    cardTonic.classList.add('highlight');
+  } else {
+    cardTonic.classList.remove('highlight');
+  }
+  if (t >= 4.0 && t < 5.0) {
+    tap2.style.opacity = 1;
+    tap2.classList.toggle('scale-on', t > 4.5);
+  } else {
+    tap2.style.opacity = 0;
+    tap2.classList.remove('scale-on');
+  }
+
+  // ── S3 — Add button tap
+  const tap3 = document.getElementById('s3-tap');
+  if (t >= 7.0 && t < 8.0) {
+    tap3.style.opacity = 1;
+    tap3.classList.toggle('scale-on', t > 7.5);
+  } else {
+    tap3.style.opacity = 0;
+    tap3.classList.remove('scale-on');
+  }
+
+  // ── S4 — Faysal tap
+  const tap4 = document.getElementById('s4-tap');
+  if (t >= 9.4 && t < 10.5) {
+    tap4.style.opacity = 1;
+    tap4.classList.toggle('scale-on', t > 10.0);
+  } else {
+    tap4.style.opacity = 0;
+    tap4.classList.remove('scale-on');
+  }
+
+  // ── S5 — IBAN copies + confirm tap
+  const copyPill = document.getElementById('copy-pill');
+  if (t >= 11.6 && t < 13.5) {
+    copyPill.classList.add('copied');
+    copyPill.textContent = '✓';
+  } else {
+    copyPill.classList.remove('copied');
+    copyPill.textContent = '⧉';
+  }
+  const tap5 = document.getElementById('s5-tap');
+  if (t >= 12.5 && t < 13.5) {
+    tap5.style.opacity = 1;
+    tap5.classList.toggle('scale-on', t > 13.0);
+  } else {
+    tap5.style.opacity = 0;
+    tap5.classList.remove('scale-on');
+  }
+
+  // ── S6 — pulse WhatsApp at 14.5, delivery pills at 15.2
+  const wa = document.getElementById('btn-wa');
+  if (wa) wa.classList.toggle('pulse', t >= 14.4 && t < 15.0);
+  const dby = document.getElementById('del-bykea');
+  const din = document.getElementById('del-indrive');
+  if (dby) dby.classList.toggle('pulse', t >= 15.1 && t < 15.8);
+  if (din) din.classList.toggle('pulse', t >= 15.1 && t < 15.8);
+}
+
+// ═══ Wait for fonts + images BEFORE starting the loop ═══
+// This is what fixes "no images". Without it, the timeline runs while
+// images are still requesting and you get blank rectangles for the
+// first ~600ms.
+async function preload() {
+  const imgs = Array.from(document.images);
+  await Promise.all(imgs.map((img) => {
+    if (img.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      img.addEventListener('load', resolve, { once: true });
+      img.addEventListener('error', resolve, { once: true });
+      // If decode is supported, prefer it (waits until pixels are decoded)
+      if (typeof img.decode === 'function') img.decode().then(resolve).catch(resolve);
+    });
+  }));
+  if (document.fonts && document.fonts.ready) {
+    await document.fonts.ready;
+  }
+}
+
+const params = new URLSearchParams(location.search);
+const isSnapshot = params.get('snapshot') === '1';
+
+preload().then(() => {
+  document.getElementById('loader').classList.add('hide');
+
+  if (isSnapshot) {
+    const t = parseFloat(params.get('t') || '0');
+    const style = document.createElement('style');
+    style.textContent = '*, *::before, *::after { transition-duration: 0s !important; animation-duration: 0s !important; }';
+    document.head.appendChild(style);
+    setT(t);
+    document.body.setAttribute('data-snapshot-ready', '1');
+  } else {
+    const start = performance.now();
+    function tick(now) {
+      const elapsed = ((now - start) / 1000) % TOTAL;
+      setT(elapsed);
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+});
+
+// Scale stage to viewport while preserving 9:16
 function fit() {
   const stage = document.getElementById('stage');
   const vw = window.innerWidth;
@@ -578,8 +796,10 @@ function fit() {
   const scale = Math.min(vw / 1080, vh / 1920);
   stage.style.transform = `scale(${scale})`;
 }
-fit();
-window.addEventListener('resize', fit);
+if (!isSnapshot) {
+  fit();
+  window.addEventListener('resize', fit);
+}
 </script>
 </body>
 </html>

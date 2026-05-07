@@ -19,7 +19,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, X, Check, Search, ArrowRight, MessageCircle, Loader2, Crosshair } from 'lucide-react';
 import { useZone } from '@/lib/zone-context';
 import { SHOP, deliveryAreaClusters, type DeliveryArea } from '@/lib/shop';
-import { autoFillAddress } from '@/lib/geo-fill';
+import { autoFillAddress, smartClusterHint } from '@/lib/geo-fill';
 import Flower from '@/components/brand/Flower';
 import Wordmark from '@/components/brand/Wordmark';
 
@@ -184,25 +184,30 @@ function PickStep({
     setLocMsg(null);
     try {
       const res = await autoFillAddress();
-      // Don't auto-pick — Nominatim's block-level data in Karachi is too
-      // unreliable (mixes Block B with Block L, etc.). Show the user a
-      // hint of what we detected so they can pick the right one manually
-      // from the list below. The text gets pre-set into the search box
-      // so matching blocks rise to the top.
-      const hint =
+      // Translate the (often-broader) Nominatim area to one of OUR covered
+      // cluster names — "Nazimabad" → "North Nazimabad", etc. If we get a
+      // hit, pre-fill the search box with the canonical cluster name so
+      // the right block group surfaces. Otherwise just show the raw hint
+      // and let the user pick from the full list.
+      const canonical = smartClusterHint(res.parts);
+      const rawHint =
         res.parts.areaName ||
         res.parts.display.split(',').slice(0, 2).join(', ');
-      if (hint) {
+      if (canonical) {
+        setQuery(canonical);
         setLocMsg({
           tone: 'ok',
-          text: `📍 You're near ${hint}. Tap the right block below.`,
+          text: `📍 You're in ${canonical} — tap your block below.`,
         });
-        // Pre-fill the search box so the user's area surfaces first
-        if (res.parts.areaName) setQuery(res.parts.areaName);
+      } else if (rawHint) {
+        setLocMsg({
+          tone: 'err',
+          text: `📍 Looks like ${rawHint} — pick your block from the list, or WhatsApp us if you don't see it.`,
+        });
       } else {
         setLocMsg({
           tone: 'err',
-          text: "Couldn't read your location well. Pick your block manually.",
+          text: "Couldn't read your location precisely. Pick your block manually.",
         });
       }
     } catch (e: any) {

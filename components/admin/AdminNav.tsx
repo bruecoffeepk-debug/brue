@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Coffee, FolderOpen, Home, LayoutGrid, LogOut, ExternalLink, Receipt } from 'lucide-react';
+import { BarChart3, Coffee, FolderOpen, Home, LayoutGrid, LogOut, ExternalLink, Receipt } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import Wordmark from '@/components/brand/Wordmark';
 
 const NAV = [
   { href: '/admin', label: 'Dashboard', icon: LayoutGrid, exact: true },
   { href: '/admin/orders', label: 'Orders', icon: Receipt },
+  { href: '/admin/analytics', label: 'Analytics', icon: BarChart3 },
   { href: '/admin/drinks', label: 'Drinks', icon: Coffee },
   { href: '/admin/categories', label: 'Categories', icon: FolderOpen },
 ];

@@ -18,6 +18,7 @@ import { ChevronLeft, ChevronRight, MapPin, Minus, Plus, X } from 'lucide-react'
 import { pkr, drinkPhotos } from '@/lib/utils';
 import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
+import { track } from '@/lib/analytics';
 
 export default function DrinkDetailModal() {
   const { openDrink, closeDrinkModal, addToCart, openCart } = useCart();
@@ -298,9 +299,15 @@ export default function DrinkDetailModal() {
           ) : canOrder ? (
             <button
               onClick={() => {
+                track('add_to_cart', {
+                  drink_id: drink.id,
+                  drink_name: drink.name,
+                  qty,
+                  price: drink.price,
+                  line_total: drink.price * qty,
+                });
                 addToCart(drink, qty);
                 closeDrinkModal();
-                // Pop the cart drawer briefly so the user knows it landed.
                 openCart();
               }}
               className="btn btn-terra"

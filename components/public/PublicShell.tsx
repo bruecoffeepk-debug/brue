@@ -13,8 +13,10 @@
 import { ShoppingBag } from 'lucide-react';
 import { pkr } from '@/lib/utils';
 import { useCart } from '@/lib/cart-context';
+import { track } from '@/lib/analytics';
 import DrinkDetailModal from './DrinkDetailModal';
 import CheckoutDrawer from './CheckoutDrawer';
+import AnalyticsTracker from './AnalyticsTracker';
 
 export default function PublicShell() {
   const { cartCount, subtotal, cartOpen, openCart } = useCart();
@@ -23,7 +25,10 @@ export default function PublicShell() {
     <>
       {cartCount > 0 && !cartOpen && (
         <button
-          onClick={openCart}
+          onClick={() => {
+            track('cart_open', { count: cartCount, subtotal });
+            openCart();
+          }}
           className="fixed z-40 inline-flex items-center gap-3 rounded-full pl-3 pr-4 py-2"
           style={{
             left: '50%',
@@ -64,6 +69,7 @@ export default function PublicShell() {
 
       <DrinkDetailModal />
       <CheckoutDrawer />
+      <AnalyticsTracker />
     </>
   );
 }

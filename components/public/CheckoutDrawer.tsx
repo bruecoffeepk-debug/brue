@@ -20,6 +20,7 @@ import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
 import { isOpenNow, statusLabel } from '@/lib/hours';
 import { autoFillAddress, validatePkPhone, formatPkPhone } from '@/lib/geo-fill';
+import { track } from '@/lib/analytics';
 import { Turnstile } from './Turnstile';
 
 /** Re-evaluates `isOpenNow()` every 30s so a checkout drawer left open
@@ -164,6 +165,7 @@ export default function CheckoutDrawer() {
     if (!paymentId) return fail('payment', 'Pick a payment method');
 
     setSubmitting(true);
+    track('order_attempt', { type, subtotal, total, payment_method: paymentId });
     try {
       const res = await fetch('/api/orders', {
         method: 'POST',
@@ -221,6 +223,13 @@ export default function CheckoutDrawer() {
           'Order placed but no confirmation received — please WhatsApp us to verify.'
         );
       }
+      track('order_placed', {
+        order_id: json.id,
+        order_number: json.order_number,
+        total,
+        type,
+        payment_method: paymentId,
+      });
       setPlaced(json);
       setStep('placed');
       // Clear the cart now that we have a confirmed order — staff have it
@@ -235,6 +244,7 @@ export default function CheckoutDrawer() {
         e?.name === 'TypeError'
           ? 'No connection — check your internet and try again.'
           : e?.message || 'Could not place order';
+      track('order_failed', { reason: msg });
       setSubmitErr(msg);
     } finally {
       setSubmitting(false);
@@ -810,6 +820,7 @@ export default function CheckoutDrawer() {
                       if (!blockNo.trim()) return fail('block', 'Add your block no.');
                       if (!areaName.trim()) return fail('area', 'Add your area name');
                     }
+                    track('checkout_continue', { type, subtotal });
                     setStep('payment');
                   }}
                   disabled={needsArea || !shop.open}
@@ -850,7 +861,10 @@ export default function CheckoutDrawer() {
           <PaymentStep
             total={total}
             paymentId={paymentId}
-            setPaymentId={setPaymentId}
+            setPaymentId={(id) => {
+              track('payment_method_pick', { method: id, total });
+              setPaymentId(id);
+            }}
             onBack={() => setStep('details')}
             onConfirmPaid={placeOrder}
             submitting={submitting}

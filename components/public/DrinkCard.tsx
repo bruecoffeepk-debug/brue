@@ -21,6 +21,7 @@ import { pkr, drinkPhotos } from '@/lib/utils';
 import type { DrinkWithCategory } from '@/lib/utils';
 import { useCart } from '@/lib/cart-context';
 import { useZone } from '@/lib/zone-context';
+import { track } from '@/lib/analytics';
 
 export default function DrinkCard({ drink }: { drink: DrinkWithCategory }) {
   const { openDrinkModal } = useCart();
@@ -35,7 +36,14 @@ export default function DrinkCard({ drink }: { drink: DrinkWithCategory }) {
   return (
     <button
       type="button"
-      onClick={() => openDrinkModal(drink)}
+      onClick={() => {
+        track('drink_view', {
+          drink_id: drink.id,
+          drink_name: drink.name,
+          category: drink.category,
+        });
+        openDrinkModal(drink);
+      }}
       id={drink.id}
       className="group text-left w-full"
       style={{ opacity: sold ? 0.6 : 1, cursor: 'pointer' }}

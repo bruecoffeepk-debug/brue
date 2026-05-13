@@ -45,16 +45,19 @@ export const SHOP = {
   phoneTel: '',
 
   // ── DELIVERY ──────────────────────────────────────────────
-  // Area-based coverage — visitors pick from this curated list at entry.
-  // Anything not in this list is "browse only". Add/remove blocks here
-  // and the welcome gate, nav chip, menu banner and /api/orders guard
-  // will pick it up automatically.
+  // Radius-based coverage. Anyone within `radiusKm` of the shop pin
+  // (computed from SHOP.lat/lng) can order. The legacy `areas` array
+  // below is kept for marketing copy on /find-us only — it is NOT
+  // enforced anywhere. The radius is the only gate.
   delivery: {
+    radiusKm: 6,
     methods: [
       { id: 'bykea', label: 'Bykea',   note: 'You book on the Bykea app · pay rider' },
       { id: 'indrive', label: 'inDrive', note: 'You book on inDrive app · pay rider' },
       { id: 'whatsapp', label: 'WhatsApp', note: 'We coordinate a rider on WhatsApp' },
     ] as const,
+    /** Display-only — listed on /find-us as the neighbourhoods within the
+     *  radius. Not enforced; the actual gate is the haversine distance. */
     areas: [
       // FB Area — blocks 4-7 + 10-13
       { id: 'fb-4',  label: 'Block 4',  cluster: 'FB Area' },
@@ -118,10 +121,42 @@ export function deliveryAreaClusters(): { cluster: string; areas: DeliveryArea[]
   return Array.from(map, ([cluster, areas]) => ({ cluster, areas }));
 }
 
-/** Short marketing summary: "FB Area + North Nazimabad · 14 blocks". */
+/** Short marketing summary: "Within 6km of BRUE · FB Area + North Nazimabad". */
 export function deliverySummary(): string {
   const clusters = deliveryAreaClusters();
-  return `${clusters.map((c) => c.cluster).join(' + ')} · ${SHOP.delivery.areas.length} blocks`;
+  return `Within ${SHOP.delivery.radiusKm} km · ${clusters.map((c) => c.cluster).join(' + ')}`;
+}
+
+// ─── DISTANCE GATE ───────────────────────────────────────────
+// Haversine distance + simple "in range?" check. Used by both the
+// welcome gate and /api/orders so the same rule applies client and
+// server.
+
+/** Great-circle distance in kilometres between two lat/lng points. */
+export function haversineKm(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number }
+): number {
+  const R = 6371;
+  const toRad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Distance from BRUE to the supplied point, in km. */
+export function distanceFromShopKm(point: { lat: number; lng: number }): number {
+  return haversineKm({ lat: SHOP.lat, lng: SHOP.lng }, point);
+}
+
+/** True if a lat/lng is within our delivery radius. */
+export function isWithinDeliveryRange(point: { lat: number; lng: number }): boolean {
+  return distanceFromShopKm(point) <= SHOP.delivery.radiusKm;
 }
 
 // ─── PAYMENT OPTIONS (web checkout) ──────────────────────────

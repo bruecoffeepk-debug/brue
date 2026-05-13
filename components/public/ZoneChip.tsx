@@ -1,12 +1,13 @@
 'use client';
 
 /**
- * Tiny pill in the nav that surfaces the visitor's zone status and lets
- * them re-open the WelcomeGate to change it.
+ * Tiny pill in the nav that surfaces the visitor's distance status and
+ * lets them re-open the WelcomeGate to re-check.
  *
- *   · Picked a covered area  →  "Block 7 · FB Area"  (sage)
- *   · Just browsing          →  "Browsing · Set area" (neutral)
- *   · First visit / unknown  →  "Check area"         (neutral)
+ *   · GPS in range   →  "2.3 km · in range"        (sage)
+ *   · GPS out        →  "8.1 km · out of range"    (terra)
+ *   · Manual mode    →  "Address mode"             (neutral)
+ *   · Unknown        →  "Check delivery"           (neutral)
  */
 
 import { MapPin } from 'lucide-react';
@@ -15,26 +16,36 @@ import { useZone } from '@/lib/zone-context';
 export default function ZoneChip({ compact = false }: { compact?: boolean }) {
   const zone = useZone();
 
-  // Don't render before hydration finishes, to avoid a flicker.
   if (!zone.resolved) return null;
 
-  const inZone = zone.status === 'in' && zone.area;
-  const browsing = zone.status === 'browsing';
+  const inRange = zone.status === 'in';
+  const outRange = zone.status === 'out';
+  const manual = zone.status === 'manual';
 
-  const text = inZone
-    ? `${zone.area!.label} · ${zone.area!.cluster}`
-    : browsing
-    ? 'Browsing · Set area'
-    : 'Check area';
+  const text = inRange
+    ? `${zone.distanceKm?.toFixed(1)} km · in range`
+    : outRange
+    ? `${zone.distanceKm?.toFixed(1)} km · out of range`
+    : manual
+    ? 'Address mode'
+    : 'Check delivery';
 
-  const bg = inZone ? 'rgba(107,122,83,0.16)' : 'rgba(28,23,18,0.06)';
-  const color = inZone ? 'var(--sage)' : 'var(--ink-muted)';
-  const dot = inZone ? 'var(--sage)' : 'var(--ink-muted)';
+  const bg = inRange
+    ? 'rgba(107,122,83,0.16)'
+    : outRange
+    ? 'rgba(196,69,38,0.12)'
+    : 'rgba(28,23,18,0.06)';
+  const color = inRange
+    ? 'var(--sage)'
+    : outRange
+    ? 'var(--terra-deep)'
+    : 'var(--ink-muted)';
+  const dot = color;
 
   return (
     <button
       onClick={zone.openGate}
-      aria-label={inZone ? `${text} — change` : 'Pick your delivery area'}
+      aria-label={`${text} — change`}
       className="inline-flex items-center gap-2 rounded-full transition-opacity hover:opacity-80"
       style={{
         background: bg,
@@ -46,7 +57,7 @@ export default function ZoneChip({ compact = false }: { compact?: boolean }) {
         textTransform: 'uppercase',
       }}
     >
-      {inZone ? (
+      {inRange || outRange ? (
         <span
           style={{
             width: 6,

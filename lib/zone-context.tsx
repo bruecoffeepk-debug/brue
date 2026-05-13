@@ -1,20 +1,19 @@
 'use client';
 
 /**
- * ZoneProvider — knows which covered neighbourhood the current visitor
- * picked, and exposes a `canOrder` gate that Order/Add-to-cart CTAs
- * consult across the public surface.
+ * ZoneProvider — radius-based delivery gate.
  *
- *   const { status, area, canOrder, openGate, reset } = useZone();
+ *   const { status, distanceKm, coords, canOrder, openGate, reset } = useZone();
  *
  * Status values:
- *   'unknown'  — first visit, no decision yet
- *   'in'       — picked a covered area, ordering allowed
- *   'browsing' — explicitly chose "my area isn't here, just browsing"
+ *   'unknown'  — first visit, no decision yet (the WelcomeGate is showing)
+ *   'in'       — visitor's GPS is within SHOP.delivery.radiusKm. Ordering on.
+ *   'out'      — visitor's GPS is outside the radius. Ordering off, browse only.
+ *   'manual'   — visitor denied / skipped geolocation but said "I'll type my
+ *                address". Ordering on; we trust the address at checkout.
  *
- * The decision persists in localStorage under `brue.zone.v2` so repeat
- * visitors don't get asked again. A small chip in the nav lets them
- * re-open the gate to change it.
+ * Persists for 30 days under `brue.zone.v3` so repeat visitors aren't asked
+ * again. Bump the storage key version to force re-asking everyone.
  */
 
 import {
@@ -25,108 +24,113 @@ import {
   useMemo,
   useState,
 } from 'react';
-import { SHOP, findDeliveryArea, type DeliveryArea } from './shop';
+import { SHOP, distanceFromShopKm, isWithinDeliveryRange } from './shop';
 
-const STORAGE_KEY = 'brue.zone.v2';
-// Invalidate stored decisions older than 30 days — if someone moves or
-// comes back a month later, re-ask in case the covered list changed.
+const STORAGE_KEY = 'brue.zone.v3';
 const TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
-export type ZoneStatus = 'unknown' | 'in' | 'browsing';
+export type ZoneStatus = 'unknown' | 'in' | 'out' | 'manual';
+export type Coords = { lat: number; lng: number };
 
 type Stored = {
-  v: 2;
+  v: 3;
   status: ZoneStatus;
-  areaId: string | null;
+  coords: Coords | null;
+  distanceKm: number | null;
   checkedAt: number;
 };
 
 export type ZoneState = {
   status: ZoneStatus;
-  area: DeliveryArea | null;
-  areaId: string | null;
-  /** convenience — visitor picked a covered area */
+  coords: Coords | null;
+  distanceKm: number | null;
+  /** Convenience — visitor can place an order */
   canOrder: boolean;
-  /** hydration finished — safe to render zone-dependent UI */
+  /** Hydration finished — safe to render zone-dependent UI */
   resolved: boolean;
   gateOpen: boolean;
   openGate: () => void;
   closeGate: () => void;
   reset: () => void;
-  /** Pick a covered area. Returns false if the id isn't in the covered list. */
-  setArea: (id: string) => boolean;
-  /** Explicit "my area isn't here — just browsing". */
-  setBrowsing: () => void;
+  /** Set GPS coords; auto-computes distance + flips status to in/out. */
+  setCoords: (c: Coords) => void;
+  /** Visitor opted to type their address manually (skipped GPS). */
+  setManual: () => void;
 };
 
 const Ctx = createContext<ZoneState | null>(null);
 
 export function ZoneProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<ZoneStatus>('unknown');
-  const [areaId, setAreaId] = useState<string | null>(null);
+  const [coords, setCoordsState] = useState<Coords | null>(null);
+  const [distanceKm, setDistanceKm] = useState<number | null>(null);
   const [resolved, setResolved] = useState(false);
   const [gateOpen, setGateOpen] = useState(false);
 
-  // Hydrate from localStorage on mount
+  // Hydrate from localStorage
   useEffect(() => {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Stored;
-        if (parsed?.v === 2 && Date.now() - parsed.checkedAt < TTL_MS) {
-          // Re-validate that the stored area is still covered. If the
-          // owner removed it, wipe and re-ask.
-          if (parsed.status === 'in') {
-            const stillCovered = findDeliveryArea(parsed.areaId);
-            if (stillCovered) {
-              setStatus('in');
-              setAreaId(parsed.areaId);
-              setResolved(true);
-              return;
-            }
-          } else if (parsed.status === 'browsing') {
-            setStatus('browsing');
+        if (parsed?.v === 3 && Date.now() - parsed.checkedAt < TTL_MS) {
+          // Re-check whether the stored coords are still in range — owner may
+          // have moved the shop pin or changed the radius.
+          if (parsed.status === 'in' && parsed.coords) {
+            const stillIn = isWithinDeliveryRange(parsed.coords);
+            setStatus(stillIn ? 'in' : 'out');
+            setCoordsState(parsed.coords);
+            setDistanceKm(distanceFromShopKm(parsed.coords));
             setResolved(true);
             return;
           }
+          setStatus(parsed.status);
+          setCoordsState(parsed.coords);
+          setDistanceKm(parsed.distanceKm);
+          setResolved(true);
+          return;
         }
       }
     } catch {
-      /* corrupt value — ignore */
+      /* corrupt — re-ask */
     }
-    // First visit (or stale) — open the gate after the page paints.
     setResolved(true);
     const t = window.setTimeout(() => setGateOpen(true), 500);
     return () => window.clearTimeout(t);
   }, []);
 
-  const persist = useCallback((next: Omit<Stored, 'v' | 'checkedAt'>) => {
-    if (typeof window === 'undefined') return;
-    const payload: Stored = { v: 2, checkedAt: Date.now(), ...next };
-    try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-    } catch {
-      /* storage disabled / quota — fine */
-    }
-  }, []);
+  const persist = useCallback(
+    (next: Omit<Stored, 'v' | 'checkedAt'>) => {
+      if (typeof window === 'undefined') return;
+      const payload: Stored = { v: 3, checkedAt: Date.now(), ...next };
+      try {
+        window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+      } catch {
+        /* ignore */
+      }
+    },
+    []
+  );
 
-  const setArea = useCallback(
-    (id: string): boolean => {
-      const covered = findDeliveryArea(id);
-      if (!covered) return false;
-      setStatus('in');
-      setAreaId(id);
-      persist({ status: 'in', areaId: id });
-      return true;
+  const setCoords = useCallback(
+    (c: Coords) => {
+      const km = distanceFromShopKm(c);
+      const inRange = km <= SHOP.delivery.radiusKm;
+      const next: ZoneStatus = inRange ? 'in' : 'out';
+      setCoordsState(c);
+      setDistanceKm(km);
+      setStatus(next);
+      persist({ status: next, coords: c, distanceKm: km });
     },
     [persist]
   );
 
-  const setBrowsing = useCallback(() => {
-    setStatus('browsing');
-    setAreaId(null);
-    persist({ status: 'browsing', areaId: null });
+  const setManual = useCallback(() => {
+    setStatus('manual');
+    setCoordsState(null);
+    setDistanceKm(null);
+    persist({ status: 'manual', coords: null, distanceKm: null });
   }, [persist]);
 
   const reset = useCallback(() => {
@@ -134,30 +138,29 @@ export function ZoneProvider({ children }: { children: React.ReactNode }) {
       window.localStorage.removeItem(STORAGE_KEY);
     }
     setStatus('unknown');
-    setAreaId(null);
+    setCoordsState(null);
+    setDistanceKm(null);
     setGateOpen(true);
   }, []);
 
   const openGate = useCallback(() => setGateOpen(true), []);
   const closeGate = useCallback(() => setGateOpen(false), []);
 
-  const area = useMemo(() => findDeliveryArea(areaId) ?? null, [areaId]);
-
   const value = useMemo<ZoneState>(
     () => ({
       status,
-      area,
-      areaId,
-      canOrder: status === 'in',
+      coords,
+      distanceKm,
+      canOrder: status === 'in' || status === 'manual',
       resolved,
       gateOpen,
       openGate,
       closeGate,
       reset,
-      setArea,
-      setBrowsing,
+      setCoords,
+      setManual,
     }),
-    [status, area, areaId, resolved, gateOpen, openGate, closeGate, reset, setArea, setBrowsing]
+    [status, coords, distanceKm, resolved, gateOpen, openGate, closeGate, reset, setCoords, setManual]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -169,16 +172,16 @@ export function useZone(): ZoneState {
     // Fail soft — ordering stays locked if someone forgot the provider.
     return {
       status: 'unknown',
-      area: null,
-      areaId: null,
+      coords: null,
+      distanceKm: null,
       canOrder: false,
-      resolved: false,
+      resolved: true,
       gateOpen: false,
       openGate: () => {},
       closeGate: () => {},
       reset: () => {},
-      setArea: () => false,
-      setBrowsing: () => {},
+      setCoords: () => {},
+      setManual: () => {},
     };
   }
   return v;

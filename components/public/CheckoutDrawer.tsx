@@ -54,11 +54,9 @@ export default function CheckoutDrawer() {
     zone.canOrder ? 'delivery' : 'pickup'
   );
   const [method, setMethod] = useState<string>(SHOP.delivery.methods[0].id);
-  // Address split into 3 explicit components so it matches what the gate
-  // captures + so geolocation auto-fill can populate each cleanly.
-  // - House no: typed by visitor (rider needs the door)
-  // - Block no: pre-filled from zone.area.label, editable
-  // - Area name: pre-filled from zone.area.cluster, editable
+  // Address split into 3 explicit components. We're now radius-gated so
+  // there's no preset area to pre-fill from — visitor types all three (or
+  // taps "Use my location" to auto-fill).
   const [houseNo, setHouseNo] = useState('');
   const [blockNo, setBlockNo] = useState('');
   const [areaName, setAreaName] = useState('');
@@ -88,15 +86,9 @@ export default function CheckoutDrawer() {
       : {};
   }
 
-  // Pre-fill block/area from the zone the visitor picked at the gate.
-  // Re-runs if they change the zone — so a "Change" button in the address
-  // section repopulates correctly.
-  useEffect(() => {
-    if (zone.area) {
-      setBlockNo((curr) => curr || zone.area!.label);
-      setAreaName((curr) => curr || zone.area!.cluster);
-    }
-  }, [zone.area]);
+  // Nothing to pre-fill from zone-context now (radius-based — no curated
+  // area). Geolocation auto-fill at the bottom of this component is the
+  // shortcut.
 
   async function detectAddress() {
     setLocating(true);
@@ -140,7 +132,11 @@ export default function CheckoutDrawer() {
     receiptUrl: string;
   } | null>(null);
 
-  const needsArea = type === 'delivery' && !zone.area;
+  // Out-of-range visitors can't place a delivery order — they'd hit the
+  // server-side distance gate anyway. Force them to pickup or back to the
+  // gate (where they'll see the WhatsApp escape hatch).
+  const blockedDelivery = type === 'delivery' && zone.status === 'out';
+  const needsArea = blockedDelivery; // kept name for fewer downstream changes
 
   // If the drawer is closed, render nothing — don't keep the form mounted.
   if (!cartOpen) return null;
@@ -157,9 +153,11 @@ export default function CheckoutDrawer() {
       return fail('phone', 'Phone must be a valid PK mobile (e.g. 0300 1234567)');
     }
     if (type === 'delivery') {
-      if (!zone.area) return fail(null, 'Pick a delivery area first');
+      if (zone.status === 'out') {
+        return fail(null, "You're outside our delivery range — try pickup or WhatsApp us.");
+      }
       if (!houseNo.trim()) return fail('house', 'Add your house no.');
-      if (!blockNo.trim()) return fail('block', 'Add your block no.');
+      if (!blockNo.trim()) return fail('block', 'Add your block / street');
       if (!areaName.trim()) return fail('area', 'Add your area name');
     }
     if (!paymentId) return fail('payment', 'Pick a payment method');
@@ -174,15 +172,18 @@ export default function CheckoutDrawer() {
           customer: { name, phone: normalisedPhone },
           type,
           delivery:
-            type === 'delivery' && zone.area
+            type === 'delivery'
               ? {
                   method,
-                  area_id: zone.area.id,
                   house_no: houseNo.trim(),
                   block_no: blockNo.trim(),
                   area_name: areaName.trim(),
-                  // Composed string kept for back-compat with anything still
-                  // reading `street` server-side.
+                  // Send GPS only if the visitor used "Use my location" (we
+                  // captured coords in the zone-context). Server uses these
+                  // to enforce the radius — manual addresses are trusted.
+                  lat: zone.coords?.lat ?? null,
+                  lng: zone.coords?.lng ?? null,
+                  // Composed string kept for back-compat.
                   street: `${houseNo.trim()}, ${blockNo.trim()}, ${areaName.trim()}`,
                 }
               : undefined,
@@ -490,8 +491,8 @@ export default function CheckoutDrawer() {
               {type === 'delivery' && (
                 <>
                   <div className="field-group">
-                    <label>Your area</label>
-                    {zone.area ? (
+                    <label>Distance check</label>
+                    {zone.status === 'in' && (
                       <div
                         className="flex items-center gap-3 rounded-xl px-4 py-3"
                         style={{
@@ -502,33 +503,23 @@ export default function CheckoutDrawer() {
                         <span
                           className="inline-flex items-center justify-center"
                           style={{
-                            width: 30,
-                            height: 30,
-                            borderRadius: 999,
-                            background: 'rgba(107,122,83,0.25)',
-                            color: 'var(--sage)',
+                            width: 30, height: 30, borderRadius: 999,
+                            background: 'rgba(107,122,83,0.25)', color: 'var(--sage)',
                           }}
                         >
                           <Check size={14} />
                         </span>
                         <div className="flex-1">
                           <div className="serif" style={{ fontSize: 16 }}>
-                            {zone.area.label}
+                            ~{zone.distanceKm?.toFixed(1) ?? '—'} km from BRUE
                           </div>
                           <div style={{ color: 'var(--ink-muted)', fontSize: 12 }}>
-                            {zone.area.cluster} · covered
+                            Inside our delivery zone
                           </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={zone.openGate}
-                          className="text-[11px] underline"
-                          style={{ color: 'var(--ink-muted)' }}
-                        >
-                          Change
-                        </button>
                       </div>
-                    ) : (
+                    )}
+                    {zone.status === 'out' && (
                       <button
                         type="button"
                         onClick={zone.openGate}
@@ -540,9 +531,24 @@ export default function CheckoutDrawer() {
                           fontSize: 13,
                         }}
                       >
-                        <strong>Pick your area →</strong> we only deliver inside FB Area +
-                        North Nazimabad blocks.
+                        <strong>Out of range →</strong>{' '}
+                        about {zone.distanceKm?.toFixed(1)} km away. Pickup is open;
+                        WhatsApp us if you&apos;re close to the edge.
                       </button>
+                    )}
+                    {zone.status === 'manual' && (
+                      <div
+                        className="rounded-xl px-4 py-3"
+                        style={{
+                          background: 'var(--cream)',
+                          border: '1px solid var(--line-strong)',
+                          color: 'var(--ink-soft)',
+                          fontSize: 13,
+                        }}
+                      >
+                        Address-only mode — make sure your address below is
+                        accurate so the rider can find you.
+                      </div>
                     )}
                   </div>
 
@@ -629,7 +635,7 @@ export default function CheckoutDrawer() {
                       />
                       <input
                         className="input"
-                        placeholder="Block no. (e.g. Block 7)"
+                        placeholder="Block / street (e.g. Block 7 or Main Khayaban-e-Bukhari)"
                         value={blockNo}
                         onChange={(e) => { setBlockNo(e.target.value.slice(0, 60)); if (errField === 'block') setErrField(null); }}
                         autoComplete="address-line2"
@@ -660,9 +666,8 @@ export default function CheckoutDrawer() {
                       </p>
                     )}
                     <p style={{ color: 'var(--ink-muted)', fontSize: 11, marginTop: 8 }}>
-                      Block + area are pre-filled from{' '}
-                      <strong>{zone.area?.label ?? '—'}</strong>. Edit if you moved or
-                      change the zone via the pill above.
+                      Tip: tap <strong>Use my location</strong> above and we&apos;ll
+                      try to fill the house line for you.
                     </p>
                   </div>
                 </>
@@ -815,9 +820,11 @@ export default function CheckoutDrawer() {
                       return fail('phone', 'Phone must be a valid PK mobile (e.g. 0300 1234567)');
                     }
                     if (type === 'delivery') {
-                      if (!zone.area) return fail(null, 'Pick a delivery area first');
+                      if (zone.status === 'out') {
+                        return fail(null, "You're outside our delivery range — try pickup or WhatsApp us.");
+                      }
                       if (!houseNo.trim()) return fail('house', 'Add your house no.');
-                      if (!blockNo.trim()) return fail('block', 'Add your block no.');
+                      if (!blockNo.trim()) return fail('block', 'Add your block / street');
                       if (!areaName.trim()) return fail('area', 'Add your area name');
                     }
                     track('checkout_continue', { type, subtotal });

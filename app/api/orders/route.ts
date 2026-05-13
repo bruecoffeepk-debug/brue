@@ -25,10 +25,9 @@ import { getClientIp } from '@/lib/clientIp';
 import { verifyTurnstileToken } from '@/lib/turnstile';
 import {
   SHOP,
-  findDeliveryArea,
   findPaymentOption,
   applyPromo,
-  type DeliveryAreaId,
+  distanceFromShopKm,
   type DeliveryMethodId,
 } from '@/lib/shop';
 import { isOpenNow, statusLabel } from '@/lib/hours';
@@ -50,13 +49,17 @@ type IncomingPayload = {
   type: OrderType;
   delivery?: {
     method: DeliveryMethodId;
-    area_id: DeliveryAreaId;
-    /** Three explicit address components — match what the client gate
-     *  captures + what geolocation auto-fill populates. */
+    /** Three explicit address components — visitor-typed or filled by
+     *  reverse geocode. All required for a delivery order. */
     house_no?: string;
     block_no?: string;
     area_name?: string;
-    /** Composed string fallback; ignored if house_no is present. */
+    /** GPS — sent only if the visitor used "Use my location". When
+     *  present, server enforces the radius. When null, we trust the
+     *  typed address. */
+    lat?: number | null;
+    lng?: number | null;
+    /** Composed string fallback (legacy clients). */
     street?: string;
   };
   notes?: string | null;
@@ -202,9 +205,16 @@ async function handleOrder(req: Request) {
     return bad('Pick a payment method (we\'re online-payment only right now)');
   }
 
-  // ── delivery validation (area + method whitelist) ──
+  // ── delivery validation (radius + method whitelist) ──
+  // Coverage is now lat/lng based. If the client sends GPS, we enforce the
+  // SHOP.delivery.radiusKm haversine gate. If not (manual address mode),
+  // we trust the typed address — staff can still cancel from /admin/orders
+  // if it's nonsense.
   let delivery_method: string | null = null;
   let delivery_address: string | null = null;
+  let delivery_lat: number | null = null;
+  let delivery_lng: number | null = null;
+  let delivery_distance_km: number | null = null;
 
   if (body.type === 'delivery') {
     if (!body.delivery) return bad('Delivery details missing');
@@ -213,15 +223,6 @@ async function handleOrder(req: Request) {
     if (!method) return bad('Pick a delivery method');
     delivery_method = method.id;
 
-    const area = findDeliveryArea(body.delivery.area_id);
-    if (!area) {
-      return bad(
-        `Sorry — your area isn't in our delivery list. We currently cover FB Area + North Nazimabad. Try pickup instead.`
-      );
-    }
-
-    // Prefer the new 3-field shape, fall back to the legacy `street` blob
-    // for any older client that hasn't been refreshed.
     const houseNo  = (body.delivery.house_no  || '').trim().slice(0, 100);
     const blockNo  = (body.delivery.block_no  || '').trim().slice(0, 60);
     const areaNm   = (body.delivery.area_name || '').trim().slice(0, 80);
@@ -229,12 +230,30 @@ async function handleOrder(req: Request) {
 
     if (houseNo || blockNo || areaNm) {
       if (!houseNo) return bad('House no. required');
-      if (!blockNo) return bad('Block no. required');
+      if (!blockNo) return bad('Block / street required');
       if (!areaNm)  return bad('Area name required');
       delivery_address = `${houseNo}, ${blockNo}, ${areaNm}`;
     } else {
       if (!legacy) return bad('Address required');
-      delivery_address = `${area.cluster} · ${area.label} — ${legacy}`;
+      delivery_address = legacy;
+    }
+
+    // GPS-backed orders get the distance check. Without GPS we accept the
+    // typed address as-is — manual-mode visitors are usually legit and we'd
+    // rather risk a polite "actually we can't deliver there" cancel than
+    // turn away every customer who refused location permission.
+    const lat = typeof body.delivery.lat === 'number' ? body.delivery.lat : null;
+    const lng = typeof body.delivery.lng === 'number' ? body.delivery.lng : null;
+    if (lat != null && lng != null && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) {
+      const km = distanceFromShopKm({ lat, lng });
+      if (km > SHOP.delivery.radiusKm) {
+        return bad(
+          `You're about ${km.toFixed(1)} km from BRUE — outside our ${SHOP.delivery.radiusKm} km delivery zone. Try pickup or WhatsApp us for an exception.`
+        );
+      }
+      delivery_lat = lat;
+      delivery_lng = lng;
+      delivery_distance_km = Math.round(km * 100) / 100;
     }
   }
 
@@ -336,9 +355,9 @@ async function handleOrder(req: Request) {
     order_type: body.type,
     delivery_address,
     delivery_method,
-    delivery_lat: null,
-    delivery_lng: null,
-    delivery_distance_km: null,
+    delivery_lat,
+    delivery_lng,
+    delivery_distance_km,
     // Customer claims they paid via this method — staff will verify in
     // their actual banking app before accepting the order. Use 'unpaid'
     // before that point would be misleading; 'pending_verification' is
